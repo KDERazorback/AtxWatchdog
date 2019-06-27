@@ -1,7 +1,12 @@
-/*
- * ATX WATCHDOG PSU MONITOR
- * V 1.0 by KDERazorback (Fabian Ramos R.)
+/**
+ * AtxWatchdog
+ * Allow for managing and automated diagnosis of PSU Power Supplies
  * 
+ * @author Fabian Ramos R (KDERazorback)
+ * @version 1.0
+ */
+
+/*
  * Calibration curves: Syntax: <calCurve2/calCurve3/calCurve4>  x^4 x^3 x^2 x^1 o
  *  V12: calCurve4 0.0000000005904564646f, -0.000001065254196f, 0.0007292712878f, -0.2083356261f, 25.39229605f
  *  V5: calCurve3 0.00000003093601f, -0.000050162482454f, 0.033847756713564f, -4.93920991120435f

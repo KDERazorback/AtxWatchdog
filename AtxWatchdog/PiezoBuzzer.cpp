@@ -1,3 +1,13 @@
+/**
+ * PiezoBuzzer.cpp/PiezoBuzzer.h
+ * Sends tones to an attached active piezobuzzer with specific intervals, without using hardware interrupts
+ * 
+ * @author Fabian Ramos R
+ * @version 1.0
+ * 
+ * Requires constant calls to update() method.
+ */
+
 #include "PiezoBuzzer.h"
 
 

@@ -1,3 +1,11 @@
+/**
+ * AtxVoltmeter.cpp/AtxVoltmeter.h
+ * Allows manipulation and signal analysis of ATX compatible PC PowerSupplies
+ * 
+ * @author Fabian Ramos R
+ * @version 1.0
+ */
+
 #include "AtxVoltmeter.h"
 #include "CalibrationCurves.c"
 

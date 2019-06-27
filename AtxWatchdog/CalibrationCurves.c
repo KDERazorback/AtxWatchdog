@@ -1,3 +1,11 @@
+/**
+ * CalibrationCurves.c
+ * Provides a group of helper methods to calculate the result of linear ecuations up to 4th grade
+ * 
+ * @author Fabian Ramos R
+ * @version 1.0
+ */
+
 #ifndef CALIBRATION_CURVES_INCLUDED
 #define CALIBRATION_CURVES_INCLUDED
 

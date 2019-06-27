@@ -1,3 +1,13 @@
+/**
+ * Timer.cpp/Timer.h
+ * Executes methods at specified intervals without the use of hardware interrupts.
+ * 
+ * @author Fabian Ramos R
+ * @version 1.0
+ * 
+ * Requires constant calls to update() method.
+ */
+ 
 #ifndef TIMER_INCLUDED
 #define TIMER_INCLUDED
 
