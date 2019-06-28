@@ -289,5 +289,34 @@ namespace AtxCsvPlotter.Endpoints
 
             return output;
         }
+
+        /// <summary>
+        /// Loads an specified metadata file and returns the markers present on it. A marker is an special tag that targets a single data point, where an special event occurred on the PSU.
+        /// </summary>
+        /// <param name="filename">File to load</param>
+        /// <returns>A list of markers from the specified metadata file</returns>
+        protected long[] LoadMetadataMarkers(string filename)
+        {
+            List<long> markers = new List<long>();
+
+            using (FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                while (fs.CanRead && fs.Position < fs.Length)
+                {
+                    int valh = fs.ReadByte();
+                    int vall = fs.ReadByte();
+                    if (valh < 0 || vall < 0)
+                        break;
+
+                    long value = valh;
+                    value <<= 8;
+                    value += vall;
+
+                    markers.Add(value);
+                }
+            }
+
+            return markers.ToArray();
+        }
     }
 }

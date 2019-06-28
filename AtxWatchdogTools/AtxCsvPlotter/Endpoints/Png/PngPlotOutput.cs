@@ -159,6 +159,40 @@ namespace AtxCsvPlotter.Endpoints.Png
 
             // Draw series
             stepValue = (float) PlotSpace.Width / series[0].Length;
+
+            // Draw metadata
+            if (!string.IsNullOrWhiteSpace(Config.MetadataFile) && Config.MetadataLinesColors != null && Config.MetadataLinesColors.Length > 0)
+            {
+                long[] markers = LoadMetadataMarkers(Config.MetadataFile);
+                Font rasterFont = RasterFont(Config.MetadataFont);
+
+                for (int i = 0; i < markers.Length; i++)
+                {
+                    if (markers[i] == 0)
+                        continue; // Ignore empty markers
+
+                    Point a = PointToPixelSpace(new PointF(markers[i] * stepValue, 0));
+                    Point b = PointToPixelSpace(new PointF(markers[i] * stepValue, PlotSpace.Height));
+                    int penIndex = i;
+                    while (penIndex >= Config.MetadataLinesColors.Length)
+                        penIndex -= Config.MetadataLinesColors.Length;
+                    Pen p = new Pen(Config.MetadataLinesColors[penIndex]) { Width = InchesToPixels(Config.MetadataLinesThickness), DashStyle = Config.MetadataLinesStyle };
+                    string tag = null;
+                    if (Config.MetadataLinesNames != null && Config.MetadataLinesNames.Length > i)
+                        tag = Config.MetadataLinesNames[i];
+
+                    Device.DrawLine(p, a, b);
+                    if (!string.IsNullOrWhiteSpace(tag))
+                    {
+                        SizeF labelSize = Device.MeasureString(tag, rasterFont);
+                        Point pos = PointToPixelSpace(new PointF(markers[i] * stepValue, PlotSpace.Height));
+                        pos.Offset(-(int) (labelSize.Width / 2.0f),
+                            (int) ((labelSize.Height) * (i % 2 == 0 ? 1 : 2) * (i % 3 == 0 ? -1 : 1)));
+                        Device.DrawString(tag, rasterFont, new SolidBrush(p.Color), pos);
+                    }
+                }
+            }
+
             foreach (KeyValuePair<Rails, float[]> serie in series)
             {
                 Color serieColor = Color.Black;

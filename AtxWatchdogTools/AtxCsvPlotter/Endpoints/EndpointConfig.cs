@@ -1,4 +1,5 @@
 ﻿using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Printing;
 using System.Runtime.Serialization;
 
@@ -146,7 +147,7 @@ namespace AtxCsvPlotter.Endpoints
         /// <summary>
         /// Specifies the color used to draw the background of the Legend
         /// </summary>
-        public Color LegendBackground { get; set; } = Color.White;
+        public Color LegendBackground { get; set; } = Color.Transparent;
 
         /// <summary>
         /// Specifies the color used to draw the border on the Legend
@@ -183,5 +184,49 @@ namespace AtxCsvPlotter.Endpoints
         /// Specifies the font to use when drawing an Axis name onto the plot
         /// </summary>
         public Font AxisNameFont { get; set; } = new Font("Arial", 18.0f, GraphicsUnit.Point);
+
+        /// <summary>
+        /// Specifies the path to an additional optional metadata file that contains additional information about the PSU transition states.
+        /// </summary>
+        public string MetadataFile { get; set; } = null;
+
+        /// <summary>
+        /// Stores the Colors that will be used to draw metadata lines on the plot. Must have exactly 4 Colors.
+        /// </summary>
+        public Color[] MetadataLinesColors { get; set; } =
+        {
+            Color.Aquamarine, // T1
+            Color.BurlyWood, // T2
+            Color.CornflowerBlue, // T3
+            Color.GreenYellow, // PON
+            Color.DarkSlateGray, // T6
+        };
+
+        /// <summary>
+        /// Stores the names for each line that will be drawn on the plot from the Metadata file. Must have exactly 4 strings.
+        /// </summary>
+        public string[] MetadataLinesNames { get; set; }=
+        {
+            "T1",
+            "T2",
+            "T3",
+            "ON",
+            "T6"
+        };
+
+        /// <summary>
+        /// Stores the thickness of the lines drawn from Metadata onto the Plot. In in/100
+        /// </summary>
+        public int MetadataLinesThickness { get; set; } = 1;
+
+        /// <summary>
+        /// Stores the line style used to draw Metadata onto the Plot.
+        /// </summary>
+        public DashStyle MetadataLinesStyle { get; set; } = DashStyle.Dash;
+
+        /// <summary>
+        /// Specifies the font to use when drawing Metadata on the Plot
+        /// </summary>
+        public Font MetadataFont { get; set; } = new Font("Arial", 12.0f, GraphicsUnit.Point);
     }
 }
