@@ -147,7 +147,7 @@ void loop() {
     }
 
     unsigned long startMillis = millis();
-    while (millis() - startMillis < 1000)
+    while ((millis() - startMillis) < 1000)
       updateStatus(); // Record a little before turning the PSU on
 
     int statusPacketMarkers[5];
@@ -182,7 +182,7 @@ void loop() {
     // T1
     while (true)
     {
-      if (millis() - startMillis > 500)
+      if ((millis() - startMillis) > 500)
       {
           Serial.println("PSU did not entered T2. Giving up.");
           if (v5sbOos & 0x02 > 0)
@@ -239,7 +239,7 @@ void loop() {
 
     while (true)
     {
-      if (millis() - startMillis > 1000)
+      if ((millis() - startMillis) > 1000)
       {
           Serial.println("PSU did not entered T3. Giving up.");
           if (v5sbOos & 0x02 > 0)
@@ -305,7 +305,7 @@ void loop() {
 
     while (true)
     {
-      if (millis() - startMillis > 5000)
+      if ((millis() - startMillis) > 5000)
       {
           Serial.println("PSU did not entered PON. Giving up.");
           if (v5sbOos & 0x02 > 0)
@@ -370,13 +370,13 @@ void loop() {
     Serial.print(t3_t, DEC);
     Serial.println("ms.");
 
-    Serial.println("PON reached in ");
+    Serial.print("PON reached in ");
     Serial.print(t1_t + t2_t + t3_t, DEC);
     Serial.println("ms.");
 
     startMillis = millis();
     byte oosflags = 0;
-    while (millis - startMillis < 5000)
+    while ((millis() - startMillis) < 10000)
     {
         // Check if PSU is stable
         updateStatus();
@@ -439,7 +439,7 @@ void loop() {
 
     // Record turnoff curve
     startMillis = millis();
-    while (millis() - startMillis < 1000)
+    while ((millis() - startMillis) < 3000)
       updateStatus();
 
     // Send marker packets
@@ -449,9 +449,9 @@ void loop() {
     sendSerialInt(statusPacketMarkers[2]);
     sendSerialInt(statusPacketMarkers[3]);
     sendSerialInt(statusPacketMarkers[4]);
-    sendSerialInt(0x00); // Send a reserved null byte
-    sendSerialInt(0x00); // Send a reserved null byte
-    sendSerialInt(0x00); // Send a reserved null byte
+    sendSerialInt(0x00); // Send 2 reserved null bytes
+    sendSerialInt(0x00); // Send 2 reserved null bytes
+    sendSerialInt(0x00); // Send 2 reserved null bytes
     
     Serial.print(serialDataPacketsSent, DEC);
     Serial.println(" Data packets sent.");

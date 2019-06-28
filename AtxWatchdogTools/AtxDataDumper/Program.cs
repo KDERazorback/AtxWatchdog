@@ -333,6 +333,8 @@ namespace AtxDataDumper
 
         private static void ProcessMetadataPacket(ref MemoryStream stream)
         {
+            stream.Seek(0, SeekOrigin.Begin);
+
             stream.CopyTo(metadataStream);
             metadataDataLength += (ulong)stream.Length;
             stream.SetLength(0);
