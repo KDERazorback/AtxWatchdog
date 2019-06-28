@@ -61,10 +61,10 @@ namespace AtxCsvPlotter
             }
 
             // RUNNING CONFIG STARTS HERE
-            modeHandler.AxesNames = new string[] {"TENSIÓN", "TIEMPO"};
-            modeHandler.LegendBackground = Color.Transparent;
-            modeHandler.Background = Color.Transparent;
-            modeHandler.Dpi = 300;
+            modeHandler.Config.AxesNames = new string[] {"TENSIÓN", "TIEMPO"};
+            modeHandler.Config.LegendBackground = Color.Transparent;
+            modeHandler.Config.Background = Color.Transparent;
+            modeHandler.Config.Dpi = 300;
             // END OF RUNNING CONFIG
 
             modeHandler.Initialize();

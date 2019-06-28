@@ -25,8 +25,8 @@ namespace AtxCsvPlotter.Endpoints.Png
 
             _initialized = true;
 
-            Canvas = new Bitmap((int)InchesToPixels(PlotSize.Width), (int)InchesToPixels(PlotSize.Height));
-            Device = Graphics.FromImage(Canvas);
+            Config.Canvas = new Bitmap((int)InchesToPixels(Config.PlotSize.Width), (int)InchesToPixels(Config.PlotSize.Height));
+            Device = Graphics.FromImage(Config.Canvas);
         }
 
         public override void Plot(string inputFilename, string outputFilename, bool hasHeaders = true)
@@ -46,21 +46,21 @@ namespace AtxCsvPlotter.Endpoints.Png
             series = SortMatrix(series);
 
             // Clear graphics device
-            Device.Clear(Background);
+            Device.Clear(Config.Background);
             __WriteTmpBitmap();
 
             // Draw grid
             // VAxis
-            float stepValue = VAxisMax / VAxisSteps;
+            float stepValue = Config.VAxisMax / Config.VAxisSteps;
 
-            Font rasterAxisFont = RasterFont(AxisLabelFont);
+            Font rasterAxisFont = RasterFont(Config.AxisLabelFont);
             Point lastLabelPos = Point.Empty;
             Size lastLabelSize = Size.Empty;
-            for (int i = 0; i <= VAxisSteps; i++)
+            for (int i = 0; i <= Config.VAxisSteps; i++)
             {
                 float y = stepValue * i;
                 string ylabel;
-                if (RoundVAxisSteps)
+                if (Config.RoundVAxisSteps)
                 {
                     y = (int) Math.Round(y, 0);
                     ylabel = y.ToString("N0");
@@ -70,32 +70,32 @@ namespace AtxCsvPlotter.Endpoints.Png
 
                 y = PlotFunctionX(y);
 
-                Device.DrawLine(new Pen(GridBrush, (float)InchesToPixels(GridThickness)),
+                Device.DrawLine(new Pen(Config.GridBrush, (float)InchesToPixels(Config.GridThickness)),
                     PointToPixelSpace(new PointF(0, y)),
                     PointToPixelSpace(new PointF(PlotSpace.Width, y))
                     );
 
                 // Draw label
                 SizeF labelSize = Device.MeasureString(ylabel, rasterAxisFont);
-                Point labelPos = PointToPixelSpace(new PointF(0 - AxisThickness, y));
+                Point labelPos = PointToPixelSpace(new PointF(0 - Config.AxisThickness, y));
                 labelPos = new Point((int)(labelPos.X - labelSize.Width), (int)(labelPos.Y - (labelSize.Height / 2)));
                 lastLabelPos = labelPos;
-                Device.DrawString(ylabel, rasterAxisFont, AxisLabelBrush, labelPos);
+                Device.DrawString(ylabel, rasterAxisFont, Config.AxisLabelBrush, labelPos);
                 
                 __WriteTmpBitmap();
             }
 
-            if (DrawAxisName)
+            if (Config.DrawAxisName)
             {
-                Font rasterFont = RasterFont(AxisNameFont);
-                SizeF stringSize = Device.MeasureString(AxesNames[0], rasterFont);
+                Font rasterFont = RasterFont(Config.AxisNameFont);
+                SizeF stringSize = Device.MeasureString(Config.AxesNames[0], rasterFont);
                 Bitmap textCanvas = new Bitmap((int)Math.Max(stringSize.Height, stringSize.Width),
                     (int)Math.Max(stringSize.Height, stringSize.Width));
                 Graphics g = Graphics.FromImage(textCanvas);
                 g.CompositingQuality = CompositingQuality.HighQuality;
                 g.TranslateTransform(0, textCanvas.Height);
                 g.RotateTransform(-90.0f);
-                g.DrawString(AxesNames[0], rasterFont, AxisLabelBrush, Point.Empty);
+                g.DrawString(Config.AxesNames[0], rasterFont, Config.AxisLabelBrush, Point.Empty);
                 g.Dispose();
 
                 Device.DrawImage(textCanvas,
@@ -109,13 +109,13 @@ namespace AtxCsvPlotter.Endpoints.Png
             }
 
             // HAxis
-            stepValue = (float)PlotSpace.Width / HAxisSteps;
+            stepValue = (float)PlotSpace.Width / Config.HAxisSteps;
 
-            for (int i = 0; i <= HAxisSteps; i++)
+            for (int i = 0; i <= Config.HAxisSteps; i++)
             {
                 int x = (int)(stepValue * i);
                 string xlabel = x.ToString("N0");
-                Device.DrawLine(new Pen(GridBrush, (float)InchesToPixels(GridThickness)),
+                Device.DrawLine(new Pen(Config.GridBrush, (float)InchesToPixels(Config.GridThickness)),
                     PointToPixelSpace(new PointF(x, 0)),
                     PointToPixelSpace(new PointF(x, PlotSpace.Height))
                 );
@@ -123,23 +123,23 @@ namespace AtxCsvPlotter.Endpoints.Png
                 // Draw label
                 SizeF labelSize = Device.MeasureString(xlabel, rasterAxisFont);
                 lastLabelSize = new Size((int)labelSize.Width, (int)labelSize.Height);
-                Point labelPos = PointToPixelSpace(new PointF(x, 0 - AxisThickness));
+                Point labelPos = PointToPixelSpace(new PointF(x, 0 - Config.AxisThickness));
                 lastLabelPos = labelPos;
                 labelPos = new Point((int) (labelPos.X - (labelSize.Width / 2)), (int)(labelPos.Y));
-                Device.DrawString(xlabel, rasterAxisFont, AxisLabelBrush, labelPos);
+                Device.DrawString(xlabel, rasterAxisFont, Config.AxisLabelBrush, labelPos);
 
                 __WriteTmpBitmap();
             }
 
-            if (DrawAxisName)
+            if (Config.DrawAxisName)
             {
-                Font rasterFont = RasterFont(AxisNameFont);
-                SizeF stringSize = Device.MeasureString(AxesNames[1], rasterFont);
+                Font rasterFont = RasterFont(Config.AxisNameFont);
+                SizeF stringSize = Device.MeasureString(Config.AxesNames[1], rasterFont);
 
-                Point pos = PointToPixelSpace(new PointF(PlotSpace.Width / 2.0f, 0 - AxisThickness));
+                Point pos = PointToPixelSpace(new PointF(PlotSpace.Width / 2.0f, 0 - Config.AxisThickness));
                 pos = new Point((int)(pos.X - (stringSize.Width / 2.0f)), (int)(pos.Y + lastLabelSize.Height + stringSize.Height));
 
-                Device.DrawString(AxesNames[1], rasterFont, AxisLabelBrush,
+                Device.DrawString(Config.AxesNames[1], rasterFont, Config.AxisLabelBrush,
                     pos);
 
                 __WriteTmpBitmap();
@@ -147,11 +147,11 @@ namespace AtxCsvPlotter.Endpoints.Png
 
 
             // Draw Axes
-            Device.DrawLine(new Pen(AxisBrush, (int)InchesToPixels(AxisThickness)),
+            Device.DrawLine(new Pen(Config.AxisBrush, (int)InchesToPixels(Config.AxisThickness)),
                 PointToPixelSpace(new PointF(0, PlotSpace.Height)),
                 PointToPixelSpace(new PointF(0, 0)));
             __WriteTmpBitmap();
-            Device.DrawLine(new Pen(AxisBrush, (int)InchesToPixels(AxisThickness)),
+            Device.DrawLine(new Pen(Config.AxisBrush, (int)InchesToPixels(Config.AxisThickness)),
                 PointToPixelSpace(new PointF(0, 0)),
                 PointToPixelSpace(new PointF(PlotSpace.Width, 0)));
             __WriteTmpBitmap();
@@ -165,16 +165,16 @@ namespace AtxCsvPlotter.Endpoints.Png
                 switch (serie.Key)
                 {
                     case Rails.V12:
-                        serieColor = V12Color;
+                        serieColor = Config.V12Color;
                         break;
                     case Rails.V5:
-                        serieColor = V5Color;
+                        serieColor = Config.V5Color;
                         break;
                     case Rails.V5SB:
-                        serieColor = V5SBColor;
+                        serieColor = Config.V5SBColor;
                         break;
                     case Rails.V3_3:
-                        serieColor = V3_3Color;
+                        serieColor = Config.V3_3Color;
                         break;
                 }
 
@@ -187,7 +187,7 @@ namespace AtxCsvPlotter.Endpoints.Png
                     lastPoint = point;
                 }
 
-                if (ShowSeriesArea)
+                if (Config.ShowSeriesArea)
                 {
                     Point p1 = PointToPixelSpace(new PointF(PlotSpace.Width, 0));
                     Point p2 = PointToPixelSpace(new PointF(0, 0));
@@ -196,47 +196,47 @@ namespace AtxCsvPlotter.Endpoints.Png
                     path.CloseFigure();
 
                     Device.FillPolygon(
-                        new SolidBrush(Color.FromArgb((int) (SeriesAreaOpacity * 255), serieColor.R, serieColor.G,
+                        new SolidBrush(Color.FromArgb((int) (Config.SeriesAreaOpacity * 255), serieColor.R, serieColor.G,
                             serieColor.B)), path.PathPoints);
                     __WriteTmpBitmap();
 
-                    Device.DrawPolygon(new Pen(serieColor, InchesToPixels(LineThickness)), path.PathPoints);
+                    Device.DrawPolygon(new Pen(serieColor, InchesToPixels(Config.LineThickness)), path.PathPoints);
                     __WriteTmpBitmap();
                 }
                 else
                 {
-                    Device.DrawPath(new Pen(serieColor, InchesToPixels(LineThickness)), path);
+                    Device.DrawPath(new Pen(serieColor, InchesToPixels(Config.LineThickness)), path);
                     __WriteTmpBitmap();
                 }
             }
 
             // Draw legend
-            if (DrawLegend)
+            if (Config.DrawLegend)
             {
-                Font rasterFont = RasterFont(LegendFont);
+                Font rasterFont = RasterFont(Config.LegendFont);
                 float textHeight = Device.MeasureString("V", rasterFont).Height;
                 float textTotalWidth = 0; // In pixels
                 foreach (var serie in series)
                     textTotalWidth += Device.MeasureString(serie.Key.ToString(), rasterFont).Width;
 
-                float span = InchesToPixels(LegendItemSeparation);
+                float span = InchesToPixels(Config.LegendItemSeparation);
                 textTotalWidth += (series.Count + 2) * span;
-                textTotalWidth += series.Count * (LegendBulletSize.Width / 2.0f);
+                textTotalWidth += series.Count * (Config.LegendBulletSize.Width / 2.0f);
 
                 Rectangle legendArea = new Rectangle(0, 0,
-                    (int)(textTotalWidth + (series.Count * InchesToPixels(LegendBulletSize.Width))),
-                    (int)(InchesToPixels((LegendVerticalPadding * 2) + LegendBulletSize.Height)));
+                    (int)(textTotalWidth + (series.Count * InchesToPixels(Config.LegendBulletSize.Width))),
+                    (int)(InchesToPixels((Config.LegendVerticalPadding * 2) + Config.LegendBulletSize.Height)));
 
                 // Translate rectangle to the centroid
-                legendArea = new Rectangle(InchesToPixels(LegendCentroid.X) - (legendArea.Width / 2),
-                    InchesToPixels(LegendCentroid.Y) - (legendArea.Height / 2),
+                legendArea = new Rectangle(InchesToPixels(Config.LegendCentroid.X) - (legendArea.Width / 2),
+                    InchesToPixels(Config.LegendCentroid.Y) - (legendArea.Height / 2),
                     legendArea.Width, legendArea.Height);
 
                 // Draw background
-                Device.FillRectangle(new SolidBrush(LegendBackground), legendArea);
+                Device.FillRectangle(new SolidBrush(Config.LegendBackground), legendArea);
 
                 // Draw border
-                Device.DrawRectangle(new Pen(LegendBorderColor, InchesToPixels(LegendBorderThickness)), legendArea);
+                Device.DrawRectangle(new Pen(Config.LegendBorderColor, InchesToPixels(Config.LegendBorderThickness)), legendArea);
 
                 __WriteTmpBitmap();
 
@@ -250,35 +250,35 @@ namespace AtxCsvPlotter.Endpoints.Png
                     switch (serie.Key)
                     {
                         case Rails.V12:
-                            serieColor = V12Color;
+                            serieColor = Config.V12Color;
                             break;
                         case Rails.V5:
-                            serieColor = V5Color;
+                            serieColor = Config.V5Color;
                             break;
                         case Rails.V5SB:
-                            serieColor = V5SBColor;
+                            serieColor = Config.V5SBColor;
                             break;
                         case Rails.V3_3:
-                            serieColor = V3_3Color;
+                            serieColor = Config.V3_3Color;
                             break;
                     }
 
                     // Draw bullet
                     Rectangle bulletRect = new Rectangle((int) hPos + legendArea.X,
-                        (int) ((legendArea.Height / 2.0f) - InchesToPixels(LegendBulletSize.Height / 2.0f) + legendArea.Y),
-                        (int) (InchesToPixels(LegendBulletSize.Width)),
-                        (int) (InchesToPixels(LegendBulletSize.Height)));
+                        (int) ((legendArea.Height / 2.0f) - InchesToPixels(Config.LegendBulletSize.Height / 2.0f) + legendArea.Y),
+                        (int) (InchesToPixels(Config.LegendBulletSize.Width)),
+                        (int) (InchesToPixels(Config.LegendBulletSize.Height)));
                     Device.FillRectangle(new SolidBrush(serieColor),
                         bulletRect);
 
                     __WriteTmpBitmap();
 
                     SizeF writtenTextSize = Device.MeasureString(serie.Key.ToString(), rasterFont);
-                    Device.DrawString(serie.Key.ToString(), rasterFont, AxisLabelBrush, new PointF(bulletRect.Right + bulletRect.Width, (int)vPos + legendArea.Y));
+                    Device.DrawString(serie.Key.ToString(), rasterFont, Config.AxisLabelBrush, new PointF(bulletRect.Right + bulletRect.Width, (int)vPos + legendArea.Y));
 
                     __WriteTmpBitmap();
 
-                    hPos += span + (InchesToPixels(LegendBulletSize.Width) * 2) + writtenTextSize.Width;
+                    hPos += span + (InchesToPixels(Config.LegendBulletSize.Width) * 2) + writtenTextSize.Width;
                 }
             }
         }
@@ -286,7 +286,7 @@ namespace AtxCsvPlotter.Endpoints.Png
         public override void Finish()
         {
             Device.Dispose();
-            Canvas.Save(OutputFilename, ImageFormat.Png);
+            Config.Canvas.Save(OutputFilename, ImageFormat.Png);
         }
     }
 }

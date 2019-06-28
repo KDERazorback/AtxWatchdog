@@ -36,6 +36,7 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -45,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Endpoints\Endpoint.cs" />
+    <Compile Include="Endpoints\EndpointConfig.cs" />
     <Compile Include="Endpoints\Png\PngPlotOutput.cs" />
     <Compile Include="Endpoints\Rails.cs" />
     <Compile Include="Program.cs" />
