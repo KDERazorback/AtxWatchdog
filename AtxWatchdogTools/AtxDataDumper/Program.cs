@@ -18,9 +18,11 @@ namespace AtxDataDumper
 
         private static ulong statusDataLength = 0;
         private static ulong dataDataLength = 0;
+        private static bool isPackedProtocolPresent = false;
 
         private static FileStream dataStream;
         private static FileStream statusStream;
+        private static FileStream rawStream;
 
         static void Main(string[] args)
         {
@@ -69,6 +71,7 @@ namespace AtxDataDumper
 
             OpenDataStream();
             OpenStatusStream();
+            OpenRawStream();
 
             byte[] buffer = new byte[4096];
             MemoryStream dataStream = new MemoryStream(buffer.Length);
@@ -85,6 +88,7 @@ namespace AtxDataDumper
                     while (port.BytesToRead > 0)
                     {
                         int read = port.Read(buffer, 0, buffer.Length);
+                        rawStream.Write(buffer, 0, read);
 
                         for (int i = 0; i < read; i++)
                         {
@@ -121,6 +125,16 @@ namespace AtxDataDumper
                                     str.Length = 0;
                                     continue;
                                 }
+
+                                if (buffer[i] >= 0x80)
+                                {
+                                    // Start of new packed protocol for data packets
+                                    dataStream.Seek(0, SeekOrigin.Begin);
+                                    dataStream.WriteByte(buffer[i]);
+                                    isDataPacket = true;
+                                    isPackedProtocolPresent = true;
+                                    continue;
+                                }
                                 
                                 // Normal log output
                                 str.Append((char)buffer[i]);
@@ -130,14 +144,14 @@ namespace AtxDataDumper
                             {
                                 // End data packet
                                 isDataPacket = false;
-                                ProcessDataPacket(ref dataStream);
+                                ProcessDataPacket(ref dataStream, isPackedProtocolPresent);
                             }
 
                             if (statusStream.Length >= 2)
                             {
                                 // End status packet
                                 isStatusPacket = false;
-                                ProcessStatusPacket(ref statusStream);
+                                ProcessStatusPacket(ref statusStream, false);
                             }
                         }
                     }
@@ -170,6 +184,7 @@ namespace AtxDataDumper
 
             CloseDataStream();
             CloseStatusStream();
+            CloseRawStream();
 
             Console.WriteLine(statusDataLength.ToString("N0") + " status bytes received.");
             Console.WriteLine(dataDataLength.ToString("N0") + " data bytes received.");
@@ -197,10 +212,21 @@ namespace AtxDataDumper
             statusStream = new FileStream(".\\statusstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
         }
 
+        private static void OpenRawStream()
+        {
+            rawStream = new FileStream(".\\rawstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+        }
+
         private static void CloseDataStream()
         {
             dataStream.Flush(true);
             dataStream.Dispose();
+        }
+
+        private static void CloseRawStream()
+        {
+            rawStream.Flush(true);
+            rawStream.Dispose();
         }
 
         private static void CloseStatusStream()
@@ -209,21 +235,87 @@ namespace AtxDataDumper
             statusStream.Dispose();
         }
 
-        private static void ProcessDataPacket(ref MemoryStream stream)
+        private static void ProcessDataPacket(ref MemoryStream stream, bool packedProtocol)
         {
             stream.Seek(0, SeekOrigin.Begin);
-            stream.CopyTo(dataStream);
 
-            dataDataLength += (ulong)stream.Length;
+            if (packedProtocol)
+            {
+                // 8 bytes protocol length
+
+                if (stream.Length < 8)
+                    throw new DataMisalignedException("Input data is not aligned properly");
+
+                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00111111)); // Hi
+                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
+                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00011111)); // Hi
+                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
+                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00011111)); // Hi
+                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
+                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00011111)); // Hi
+                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
+
+                dataDataLength += 8;
+
+                ProcessStatusPacket(ref stream, true);
+            }
+            else
+            {
+                stream.CopyTo(dataStream);
+                dataDataLength += (ulong)stream.Length;
+            }
+
             stream.SetLength(0);
         }
 
-        private static void ProcessStatusPacket(ref MemoryStream stream)
+        private static void ProcessStatusPacket(ref MemoryStream stream, bool packedProtocol)
         {
             stream.Seek(0, SeekOrigin.Begin);
-            stream.CopyTo(statusStream);
 
-            statusDataLength += (ulong) stream.Length;
+            if (packedProtocol)
+            {
+                byte b1 = 0;
+                byte b2 = 0;
+
+                byte input = (byte) stream.ReadByte(); // V12 WORD
+                stream.ReadByte(); // Discard 1 byte
+
+                if ((input & 0b01000000) > 0) b2 = 1;
+
+                input = (byte) stream.ReadByte(); // V5 WORD
+                stream.ReadByte(); // Discard 1 byte
+
+                if ((input & 0b10000000) > 0) b1 |= 0b00100000; // V12_OOS
+                if ((input & 0b01000000) > 0) b1 |= 0b00010000; // V5_OOS
+                if ((input & 0b00100000) > 0) b1 |= 0b00000100; // V3_3_OOS
+
+                input = (byte) stream.ReadByte(); // V5SB WORD
+                stream.ReadByte(); // Discard 1 byte
+
+                if ((input & 0b10000000) > 0) b1 |= 0b00001000; // V5SB_OOS
+                if ((input & 0b01000000) > 0) b1 |= 0b00000010; // PSU_OK_ACTIVE
+                if ((input & 0b00100000) > 0) b1 |= 0b00000001; // ATX_IS_TRIGGERED
+
+                input = (byte) stream.ReadByte(); // V3_3 H-WORD
+
+                if ((input & 0b10000000) > 0) b1 |= 0b01000000; // PWR_OK Present
+                if ((input & 0b01000000) > 0) b1 |= 0b10000010; // PS_ON Present
+                if ((input & 0b00100000) > 0) b2 |= 0b01000000; // Buzzer is beeping
+
+                // Fill reserved bytes
+                b2 |= 0b00111111;
+
+                statusStream.WriteByte(b1);
+                statusStream.WriteByte(b2);
+
+                statusDataLength += 2;
+            }
+            else
+            {
+                stream.CopyTo(statusStream);
+                statusDataLength += (ulong) stream.Length;
+            }
+
             stream.SetLength(0);
         }
 

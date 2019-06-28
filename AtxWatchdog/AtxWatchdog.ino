@@ -95,6 +95,7 @@ void loop() {
   //lastUpdateMicros = m;
     
   updateStatus(); // Update ATX status
+  
   /*delay(2000);
   Serial.print("ATX.V12: ");
   Serial.println(Atx.V12(), DEC);
@@ -450,35 +451,37 @@ void sendSerialInt(int value)
 void updateStatus()
 {
   /*
-   * bool PS_ON_SENSE_ACTIVE = false;
-   * bool PWR_OK_ACTIVE = false;
-   * bool BOARD_PSU_MODE = false;
+   * Protocol version: 1.1
+   * 1 bit preamble (H) + 63 bits data
    */
 
-   bool requireNotify = false;
-
-   bool ps_on_last = Atx.isPsOnPresent();
-
-   bool pwr_ok_last = Atx.isPgGoodPresent();
-
    Atx.update();
-  
-   if (ps_on_last != Atx.isPsOnPresent())
-      requireNotify = true;
 
-  if (pwr_ok_last != Atx.isPgGoodPresent())
-      requireNotify = true;
+   // Send voltages over serial as Ints trimmed to the specified bit count
+   int v12 = Atx.V12() * 1000.0f; // 14 bits: max=16383mv
+   int v5 = Atx.V5() * 1000.0f; // 13 bits: max=8191mv
+   int v5sb = Atx.V5SB() * 1000.0f; // 13 bits: max=8191mv
+   int v3_3 = Atx.V3_3() * 1000.0f; // 13 bits: max=8191mv
 
-  if (requireNotify)
-    SendStatusUpdatePkg();
+   if (v12 & 0xC000) v12 = 0x3FFF;
+   if (v5 & 0xE000) v5 = 0x1FFF;
+   if (v5sb & 0xE000) v5sb = 0x1FFF;
+   if (v3_3 & 0xE000) v3_3 = 0x1FFF;
 
-   // Send voltages over serial as Ints
-   int v12 = Atx.V12() * 1000.0f;
-   int v5 = Atx.V5() * 1000.0f;
-   int v5sb = Atx.V5SB() * 1000.0f;
-   int v3_3 = Atx.V3_3() * 1000.0f;
+   /* --- */                                 v12  |= 0b1000000000000000; // Always set
+   if (BOARD_PSU_MODE)                       v12  |= 0b0100000000000000; // BOARD_PSU_MODE
 
-   Serial.write(DATA_PACKET_START);
+   if (IsOutOfSpec(Atx.V12(), 12.0f))        v5   |= 0b1000000000000000; // V12_OOS
+   if (IsOutOfSpec(Atx.V5(), 5.0f))          v5   |= 0b0100000000000000; // V5_OOS
+   if (IsOutOfSpec(Atx.V3_3(), 3.3f))        v5   |= 0b0010000000000000; // V3_3_OOS
+
+   if (IsOutOfSpec(Atx.V5SB(), 5.0f))        v5sb |= 0b1000000000000000; // V5SB_OOS
+   if (PSU_OK_ACTIVE)                        v5sb |= 0b0100000000000000; // PSU_OK_ACTIVE
+   if (Atx.isTriggered())                    v5sb |= 0b0010000000000000; // ATX_IS_TRIGGERED
+
+   if (Atx.isPgGoodPresent())                v3_3 |= 0b1000000000000000; // PWR_OK Present
+   if (Atx.isPsOnPresent())                  v3_3 |= 0b0100000000000000; // PS_ON Present
+   if (buzzer.isBeeping())                   v3_3 |= 0b0010000000000000; // Buzzer is beeping
 
    sendSerialInt(v12);
    sendSerialInt(v5);
