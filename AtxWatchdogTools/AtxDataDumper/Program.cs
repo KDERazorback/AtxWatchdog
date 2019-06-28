@@ -1,28 +1,29 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
-using System.Linq;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace AtxDataDumper
 {
     class Program
     {
-        private const byte DATA_PACKET_START = 0x11;
-        private const byte STATUS_PACKET_START = 0x12;
+        private const byte DATA_PACKET_START = 0x11; // From Arduino code
+        private const byte STATUS_PACKET_START = 0x12; // From Arduino code
+        private const byte METADATA_PACKET_START = 0x13; // From Arduino code
 
         private static bool abortSignalRequested = false;
 
         private static ulong statusDataLength = 0;
         private static ulong dataDataLength = 0;
+        private static ulong metadataDataLength = 0;
         private static bool isPackedProtocolPresent = false;
 
         private static FileStream dataStream;
         private static FileStream statusStream;
         private static FileStream rawStream;
+        private static FileStream metadataStream;
+        private static FileStream textStream;
 
         static void Main(string[] args)
         {
@@ -69,17 +70,17 @@ namespace AtxDataDumper
 
             Console.WriteLine("Port opened.");
 
-            OpenDataStream();
-            OpenStatusStream();
-            OpenRawStream();
+            OpenStreams();
 
             byte[] buffer = new byte[4096];
             MemoryStream dataStream = new MemoryStream(buffer.Length);
             MemoryStream statusStream = new MemoryStream(buffer.Length);
+            MemoryStream metadataStream = new MemoryStream(buffer.Length);
             StringBuilder str = new StringBuilder(buffer.Length);
 
             bool isDataPacket = false;
             bool isStatusPacket = false;
+            bool isMetadataPacket = false;
 
             while (port.IsOpen && !abortSignalRequested)
             {
@@ -96,6 +97,8 @@ namespace AtxDataDumper
                                 dataStream.WriteByte(buffer[i]);
                             else if (isStatusPacket)
                                 statusStream.WriteByte(buffer[i]);
+                            else if (isMetadataPacket)
+                                metadataStream.WriteByte(buffer[i]);
                             else
                             {
                                 if (buffer[i] == DATA_PACKET_START)
@@ -111,6 +114,14 @@ namespace AtxDataDumper
                                     // Begin status packet
                                     statusStream.Seek(0, SeekOrigin.Begin);
                                     isStatusPacket = true;
+                                    continue;
+                                }
+
+                                if (buffer[i] == METADATA_PACKET_START)
+                                {
+                                    // Begin metadata packet
+                                    metadataStream.Seek(0, SeekOrigin.Begin);
+                                    isMetadataPacket = true;
                                     continue;
                                 }
 
@@ -153,6 +164,13 @@ namespace AtxDataDumper
                                 isStatusPacket = false;
                                 ProcessStatusPacket(ref statusStream, false);
                             }
+
+                            if (metadataStream.Length >= 16)
+                            {
+                                // End metadata packet
+                                isMetadataPacket = false;
+                                ProcessMetadataPacket(ref metadataStream);
+                            }
                         }
                     }
                 }
@@ -181,13 +199,13 @@ namespace AtxDataDumper
 
             dataStream.Dispose();
             statusStream.Dispose();
+            metadataStream.Dispose();
 
-            CloseDataStream();
-            CloseStatusStream();
-            CloseRawStream();
+            CloseStreams();
 
             Console.WriteLine(statusDataLength.ToString("N0") + " status bytes received.");
             Console.WriteLine(dataDataLength.ToString("N0") + " data bytes received.");
+            Console.WriteLine(metadataDataLength.ToString("N0") + " metadata bytes received.");
 
 #if DEBUG
             Console.WriteLine();
@@ -202,37 +220,31 @@ namespace AtxDataDumper
             consoleCancelEventArgs.Cancel = true;
         }
 
-        private static void OpenDataStream()
+        private static void OpenStreams()
         {
             dataStream = new FileStream(".\\datastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
-        }
-
-        private static void OpenStatusStream()
-        {
             statusStream = new FileStream(".\\statusstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
-        }
-
-        private static void OpenRawStream()
-        {
             rawStream = new FileStream(".\\rawstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+            metadataStream = new FileStream(".\\metadatastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+            textStream = new FileStream(".\\textstream.txt", FileMode.Create, FileAccess.Write, FileShare.None);
         }
 
-        private static void CloseDataStream()
+        private static void CloseStreams()
         {
             dataStream.Flush(true);
             dataStream.Dispose();
-        }
-
-        private static void CloseRawStream()
-        {
+            
             rawStream.Flush(true);
             rawStream.Dispose();
-        }
 
-        private static void CloseStatusStream()
-        {
             statusStream.Flush(true);
             statusStream.Dispose();
+
+            metadataStream.Flush(true);
+            metadataStream.Dispose();
+
+            textStream.Flush(true);
+            textStream.Dispose();
         }
 
         private static void ProcessDataPacket(ref MemoryStream stream, bool packedProtocol)
@@ -319,8 +331,20 @@ namespace AtxDataDumper
             stream.SetLength(0);
         }
 
+        private static void ProcessMetadataPacket(ref MemoryStream stream)
+        {
+            stream.CopyTo(metadataStream);
+            metadataDataLength += (ulong)stream.Length;
+            stream.SetLength(0);
+        }
+
         private static void ProcessOutputLine(string line)
         {
+            if (textStream.CanWrite)
+            {
+                byte[] buffer = Encoding.ASCII.GetBytes(line + "\n");
+                textStream.Write(buffer, 0, buffer.Length);
+            }
             Console.WriteLine(line);
         }
     }

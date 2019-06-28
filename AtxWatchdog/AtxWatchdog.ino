@@ -31,6 +31,7 @@
 
 #define DATA_PACKET_START 0x11
 #define STATUS_PACKET_START 0x12
+#define DATA_MARKER_METADATA_START 0x13
 
 // RIGHT SIDE
 #define V12_SENSE A3
@@ -57,6 +58,7 @@ void setup() {
   // Setup Pins
   pinMode(MODE_SEL, INPUT);
   pinMode(PSU_OK, OUTPUT);
+  digitalWrite(PSU_OK, LOW);
   pinMode(TONE, OUTPUT);
   pinMode(PS_ON_TRIGGER, OUTPUT);
 
@@ -143,8 +145,14 @@ void loop() {
       Serial.println("Letting Main caps charge for 10s...");
       delay(10000);
     }
-    
+
+    unsigned long startMillis = millis();
+    while (millis() - startMillis < 1000)
+      updateStatus(); // Record a little before turning the PSU on
+
+    int statusPacketMarkers[5];
     updateStatus();
+    // POFF
     if (Atx.isV5sbPresent() && !Atx.isOn())
       Serial.println("PSU status POFF");
     else
@@ -167,14 +175,16 @@ void loop() {
 
     Serial.println("Turning on...");
     unsigned long endMillis;
-    unsigned long startMillis = millis();
+    startMillis = millis();
     bool v5sbOos = false; // Indicates if V5SB falled below spec during this step
     Atx.turnOn();
+    statusPacketMarkers[0] = serialDataPacketsSent; // Mark the point where the PSU was turned ON
+    // T1
     while (true)
     {
       if (millis() - startMillis > 500)
       {
-          Serial.println("PSU did not entered T1. Giving up.");
+          Serial.println("PSU did not entered T2. Giving up.");
           if (v5sbOos & 0x02 > 0)
             Serial.println("+5VSB disappeared (!).");
           else if (v5sbOos)
@@ -190,11 +200,12 @@ void loop() {
       if (!Atx.isV5sbPresent() || IsOutOfSpec(Atx.V5SB(), 5.0f))
         v5sbOos = (Atx.isV5sbPresent() ? 0x00 : 0x02) | 0x01;
 
-      if (Atx.V12() + Atx.V5() + Atx.V3_3() > 0.5f)
-        break; // Enter T1
+      if (Atx.V12() + Atx.V5() + Atx.V3_3() > 0.7f)
+        break; // Enter T2
     }
 
     endMillis = millis();
+    statusPacketMarkers[1] = serialDataPacketsSent; // Mark the point where the PSU entered T2
 
     if (v5sbOos)
     {
@@ -203,7 +214,7 @@ void loop() {
         else if (v5sbOos)
           Serial.println("+5VSB falled out of spec (!).");
         
-        Serial.println("Failed at T0");
+        Serial.println("Failed at T1");
         delay(1000);
         Atx.turnOff();
 
@@ -212,9 +223,10 @@ void loop() {
         while (true);    
     }
 
-    unsigned long t0_t = endMillis - startMillis; // T0 time
+    unsigned long t1_t = endMillis - startMillis; // T1 time
     startMillis = millis();
-
+    
+    // T2
     bool v12decayed = false;
     bool v5decayed = false;
     bool v3_3decayed = false;
@@ -229,14 +241,14 @@ void loop() {
     {
       if (millis() - startMillis > 1000)
       {
-          Serial.println("PSU did not entered T2. Giving up.");
+          Serial.println("PSU did not entered T3. Giving up.");
           if (v5sbOos & 0x02 > 0)
             Serial.println("+5VSB disappeared (!).");
           else if (v5sbOos)
             Serial.println("+5VSB falled out of spec (!)."); 
 
-          Serial.print("T0 lasted for ");
-          Serial.print(t0_t, DEC);
+          Serial.print("T1 lasted for ");
+          Serial.print(t1_t, DEC);
           Serial.println("ms");
           delay(1000);
           Atx.turnOff();
@@ -265,11 +277,12 @@ void loop() {
       lastV3_3 = Atx.V3_3();
 
       if (!IsOutOfSpec(lastV12, 12.0f) && !IsOutOfSpec(lastV5, 5.0f) && !IsOutOfSpec(lastV3_3, 3.3f))
-        break; // Enter T2
+        break; // Enter T3
     }
 
     endMillis = millis();
-
+    statusPacketMarkers[2] = serialDataPacketsSent; // Mark the point where the PSU entered T3
+    
     if (v5sbOos)
     {
         if (v5sbOos & 0x02 > 0)
@@ -277,7 +290,7 @@ void loop() {
         else if (v5sbOos)
           Serial.println("+5VSB falled out of spec (!).");
         
-        Serial.println("Failed at T1");
+        Serial.println("Failed at T2");
         delay(1000);
         Atx.turnOff();
 
@@ -286,7 +299,8 @@ void loop() {
         while (true);    
     }
 
-    unsigned long t1_t = endMillis - startMillis; // T1 time
+    // T3
+    unsigned long t2_t = endMillis - startMillis; // T2 time
     startMillis = millis();
 
     while (true)
@@ -299,12 +313,12 @@ void loop() {
           else if (v5sbOos)
             Serial.println("+5VSB falled out of spec (!)."); 
 
-          Serial.print("T0 lasted for ");
-          Serial.print(t0_t, DEC);
-          Serial.println("ms");
-
           Serial.print("T1 lasted for ");
           Serial.print(t1_t, DEC);
+          Serial.println("ms");
+
+          Serial.print("T2 lasted for ");
+          Serial.print(t2_t, DEC);
           Serial.println("ms");
 
           Serial.print(serialDataPacketsSent, DEC);
@@ -324,6 +338,7 @@ void loop() {
     }
 
     endMillis = millis();
+    statusPacketMarkers[3] = serialDataPacketsSent; // Mark the point where the PSU entered PON
 
     if (v5sbOos)
     {
@@ -332,7 +347,7 @@ void loop() {
         else if (v5sbOos)
           Serial.println("+5VSB falled out of spec (!).");
         
-        Serial.println("Failed at T2");
+        Serial.println("Failed at T3");
         delay(1000);
         Atx.turnOff();
 
@@ -341,29 +356,119 @@ void loop() {
         while (true);    
     }
 
-    unsigned long t2_t = endMillis - startMillis; // T2 time
+    unsigned long t3_t = endMillis - startMillis; // T3 time
 
-    // Reached T3
+    // Reached PON
     Serial.println("Boot sequence completed.");
-    Serial.print("T0 passed in ");
-    Serial.print(t0_t, DEC);
-    Serial.println("ms.");
     Serial.print("T1 passed in ");
     Serial.print(t1_t, DEC);
     Serial.println("ms.");
     Serial.print("T2 passed in ");
     Serial.print(t2_t, DEC);
     Serial.println("ms.");
-
-    Serial.println("PON reached in ");
-    Serial.print(t0_t + t1_t + t2_t, DEC);
+    Serial.print("T3 passed in ");
+    Serial.print(t3_t, DEC);
     Serial.println("ms.");
 
+    Serial.println("PON reached in ");
+    Serial.print(t1_t + t2_t + t3_t, DEC);
+    Serial.println("ms.");
+
+    startMillis = millis();
+    byte oosflags = 0;
+    while (millis - startMillis < 5000)
+    {
+        // Check if PSU is stable
+        updateStatus();
+        if (IsOutOfSpec(Atx.V12(), 12.0f))
+        {
+            if ((oosflags & 0b00000001) == 0)
+            {
+                Serial.print("V12 is out of specs!. ");
+                Serial.println(Atx.V12(), DEC);
+                oosflags |= 0b00000001;
+            }
+        }
+
+        if (IsOutOfSpec(Atx.V5(), 5.0f))
+        {
+            if ((oosflags & 0b00000010) == 0)
+            {
+                Serial.print("V5 is out of specs!. ");
+                Serial.println(Atx.V5(), DEC);
+                oosflags |= 0b00000010;
+            }
+        }
+
+        if (IsOutOfSpec(Atx.V5SB(), 5.0f))
+        {
+            if ((oosflags & 0b00000100) == 0)
+            {
+                Serial.print("V5SB is out of specs!. ");
+                Serial.println(Atx.V5SB(), DEC);
+                oosflags |= 0b00000100;
+            }
+        }
+
+        if (IsOutOfSpec(Atx.V3_3(), 3.3f))
+        {
+            if ((oosflags & 0b00001000) == 0)
+            {
+                Serial.print("V3.3 is out of specs!. ");
+                Serial.println(Atx.V3_3(), DEC);
+                oosflags |= 0b00001000;
+            }
+        }
+
+        if (!Atx.isPgGoodPresent())
+        {
+            if ((oosflags & 0b00010000) == 0)
+            {
+                Serial.print("PWR_OK disappeared!. ");
+                oosflags |= 0b00001000;
+            }
+        }     
+    }
+
+    Serial.print("All rails are stable. OOS error code: 0x");
+    Serial.println(oosflags, HEX);
+
+    // POFF
+    Atx.turnOff();
+    statusPacketMarkers[4] = serialDataPacketsSent; // Mark the point where the PSU was turned off
+
+    // Record turnoff curve
+    startMillis = millis();
+    while (millis() - startMillis < 1000)
+      updateStatus();
+
+    // Send marker packets
+    Serial.write(DATA_MARKER_METADATA_START); // begin data
+    sendSerialInt(statusPacketMarkers[0]);
+    sendSerialInt(statusPacketMarkers[1]);
+    sendSerialInt(statusPacketMarkers[2]);
+    sendSerialInt(statusPacketMarkers[3]);
+    sendSerialInt(statusPacketMarkers[4]);
+    sendSerialInt(0x00); // Send a reserved null byte
+    sendSerialInt(0x00); // Send a reserved null byte
+    sendSerialInt(0x00); // Send a reserved null byte
+    
     Serial.print(serialDataPacketsSent, DEC);
     Serial.println(" Data packets sent.");
 
-    delay(3000);
-    Atx.turnOff();
+    // Beep 3 times to signal a good PSU
+    digitalWrite(PSU_OK, HIGH);
+    for (int i = 1; i <= 3; i++)
+    {
+      buzzer.beep();
+      while (buzzer.isBeeping())
+        buzzer.update();
+
+      delay(350);
+    }
+
+    Serial.println("PSU is GOOD");
+    
     while (true);
   }
   else
