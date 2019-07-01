@@ -31,10 +31,8 @@ int AtxVoltmeter::avgAnalogRead(int pin)
   for (int i = 0; i < sensing_sample_avg_count; i++)
     val += analogRead(pin);
 
-  if (sensing_sample_avg_count <= 1)
-    return val;
-
-  val /= sensing_sample_avg_count;
+  if (sensing_sample_avg_count > 1)
+    val /= sensing_sample_avg_count;
 
   if (val <= 341) // CURVE Trimming of values lower than 341
     return 0;

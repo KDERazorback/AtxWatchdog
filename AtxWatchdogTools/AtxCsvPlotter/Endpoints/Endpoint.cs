@@ -174,7 +174,7 @@ namespace AtxCsvPlotter.Endpoints
         /// Loads rail data from an specified ASCII encoded CSV file. The resulting data is presented in a matrix with its axes swapped
         /// </summary>
         /// <param name="filename">Input ASCII encoded CSV filename</param>
-        /// <param name="hasHeaders">A value indicating if the input data has headers, if not, a default order of +12,+5,+5sb,+3.3 will be used</param>
+        /// <param name="hasHeaders">A value indicating if the input data has headers, if not, a default order of t0,+12,+5,+5sb,+3.3 will be used</param>
         /// <param name="headers">Output data for the headers extracted from the CSV, or the defaul ones if the data did not contain any header information</param>
         /// <returns>A Y,X matrix populated with data from the CSV file</returns>
         protected float[][] LoadMatrix(string filename, bool hasHeaders, out string[] headers)
@@ -195,7 +195,7 @@ namespace AtxCsvPlotter.Endpoints
                         line = reader.ReadLine();
                     }
                     else
-                        headers = new string[] { "v12", "v5", "v5sb", "v3_3" };
+                        headers = new string[] { "t0", "v12", "v5", "v5sb", "v3_3" };
 
                     int xcount = 0;
                     while (line != null)

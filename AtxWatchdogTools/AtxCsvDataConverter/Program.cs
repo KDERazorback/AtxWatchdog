@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace AtxCsvDataConverter
 {
@@ -16,6 +13,7 @@ namespace AtxCsvDataConverter
                 Console.WriteLine("Usage:");
                 Console.WriteLine("  atxcsv.exe <binFile1> ... [binFileN]");
                 Console.WriteLine(" This tool will convert all specified files to CSV sheets. Output files will be named according to input files");
+                Console.WriteLine(" This tool is compatible with v1.2 of the protocol only.");
 #if DEBUG
                 Console.WriteLine();
                 Console.WriteLine("Press any key to exit");
@@ -39,12 +37,12 @@ namespace AtxCsvDataConverter
                             FileShare.None))
                         {
                             StringBuilder str = new StringBuilder();
-                            str.AppendLine("v12,v5,v5sb,v3_3");
+                            str.AppendLine("t0,v12,v5,v5sb,v3_3");
                             byte[] foutBuffer = Encoding.ASCII.GetBytes(str.ToString());
                             fout.Write(foutBuffer, 0, foutBuffer.Length);
                             str.Length = 0;
 
-                            byte[] buffer = new byte[8];
+                            byte[] buffer = new byte[9];
                             while (fin.Position < fi.Length)
                             {
                                 int read = fin.Read(buffer, 0, buffer.Length);
@@ -54,7 +52,11 @@ namespace AtxCsvDataConverter
                                     break;
                                 }
 
-                                for (int i = 0; i < buffer.Length; i += 2)
+                                byte stamp = buffer[0];
+                                str.Append(stamp.ToString());
+                                str.Append(",");
+
+                                for (int i = 1; i < buffer.Length; i += 2)
                                 {
                                     UInt16 value;
                                     value = buffer[i];

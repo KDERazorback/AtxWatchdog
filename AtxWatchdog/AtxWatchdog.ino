@@ -24,13 +24,14 @@
 // LEFT SIDE
 #define MODE_SEL 4
 #define PSU_OK 5
-#define TONE 6 // 6=Buzzer, 13=Oboard SMD LED
+#define TONE 6 // 6=Buzzer, 13=Onboard SMD LED
 #define PS_ON_SENSE 7
 #define PWR_OK 8
 #define PS_ON_TRIGGER 9
 
+// Data headers
 #define DATA_PACKET_START 0x11
-#define STATUS_PACKET_START 0x12
+#define STATUS_PACKET_START 0x12 // Obsolete: Remove after fixing PC_MODE code
 #define DATA_MARKER_METADATA_START 0x13
 
 // RIGHT SIDE
@@ -39,11 +40,33 @@
 #define V5SB_SENSE A1
 #define V3_3_SENSE A0
 
+// Prescaler bit manipulation macros
+#define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))
+#define sbi(sfr, bit) (_SFR_BYTE(sfr) |= _BV(bit))
+
+// THRESHOLD VALUES
+#define ON_OFF_RAIL_SUM_THRESHOLD 0.8f // Defines the value where the PSU is considered ON when adding all primary rail values
+
+// Available session marks that can be stored inside sessionPacketMarks array (see below). These values are indexes of the mark array
+#define SESSION_MARK_T1 0x00
+#define SESSION_MARK_T2 0x01
+#define SESSION_MARK_T3 0x02
+#define SESSION_MARK_ON 0x03
+#define SESSION_MARK_T6 0x04
+#define SESSION_MARK_POFF 0x05
+#define SESSION_TOTAL_MARKS 6
+
+// Mode and tacking fields
 bool PSU_OK_ACTIVE = false; // ActiveHigh
 bool BOARD_PSU_MODE = false; // ActiveHigh
 
-unsigned long lastStatusUpdatePkgSentAt = 0;
+// Session fields (for use with sessionStart() and sessionEnd()
+unsigned long lastStatusUpdatePkgSentAt = 0; // Obsolete: Remove after fixing PC_MODE code
+unsigned long lastUpdateMicros = 0;
 unsigned long serialDataPacketsSent = 0;
+unsigned long sessionStartMicros = 0;
+unsigned long sessionPacketMarks[SESSION_TOTAL_MARKS]; // Used to record the location of various PSU events. This records packet indexes: T1 start, T2 start, T3 start, PON start, T6 start, POFF start
+unsigned long sessionTimeMarks[SESSION_TOTAL_MARKS]; // Used to record the location in time of various PSU events. This records microseconds relative to sessionStartMicros.
 
 // Classes
 PiezoBuzzer buzzer(TONE);
@@ -52,8 +75,13 @@ Timer updatePkgScheduler(&SendStatusUpdatePkg);
 
 // Sketch setup code
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(2000000);
   Serial.println("Booting...");
+
+  // Set ADC prescaler to 16
+  sbi(ADCSRA, ADPS2); // Set b2
+  cbi(ADCSRA, ADPS1); // Clear b1
+  cbi(ADCSRA, ADPS0); // Clear b0
 
   // Setup Pins
   pinMode(MODE_SEL, INPUT);
@@ -80,12 +108,13 @@ void setup() {
   Atx.setV5sbCoefficients (0                     , 0.000000144284615f , -0.000188086682585f, 0.089558333834226f , -12.314665470356156f);
   Atx.setV3_3Coefficients (0.000000000158821f    , -0.000000279452017f, 0.000186315759286f , -0.050800891265817f, 6.1451224275267f    );
 
+  Atx.setSamplingAvgCount(1);
+
   // Signal BOOT complete
   Serial.println("Boot OK");
   buzzer.beep();
 }
 
-//long lastUpdateMicros = 0;
 void loop() {
   buzzer.update(); // Ensure the TONE signal is turned off properly
 
@@ -125,7 +154,7 @@ void loop() {
     while (buzzer.isBeeping())
       buzzer.update();
     // Board is in PSU Testing Mode
-    Serial.println("TEST:START");
+    Serial.println("PSU TEST MODE");
     delay(3000);
     Atx.update();
 
@@ -146,14 +175,8 @@ void loop() {
       delay(10000);
     }
 
-    unsigned long startMillis = millis();
-    while ((millis() - startMillis) < 1000)
-      updateStatus(); // Record a little before turning the PSU on
-
-    int statusPacketMarkers[5];
-    updateStatus();
     // POFF
-    if (Atx.isV5sbPresent() && !Atx.isOn())
+    if (Atx.isV5sbPresent() && !Atx.isOn() && Atx.isPsOnPresent())
       Serial.println("PSU status POFF");
     else
     {
@@ -163,35 +186,40 @@ void loop() {
           Serial.print(Atx.V5SB(), DEC);
           Serial.println(" mV");
           delay(2000);
-          updateStatus();
+          Atx.update();
        }
        while (!Atx.isPsOnPresent())
        {
           Serial.println("PS_ON is not present.");
           delay(2000);
-          updateStatus();
+          Atx.update();
        }
     }
 
     Serial.println("Turning on...");
-    unsigned long endMillis;
-    startMillis = millis();
+    sessionStart(); // From this point forward, try to keep serial-log silence. Try to send data bytes or error conditions only
+
+   unsigned long startMillis = millis();
+    while ((millis() - startMillis) < 1000)
+      updateStatus(); // Record a little before turning the PSU on    
+
     bool v5sbOos = false; // Indicates if V5SB falled below spec during this step
     Atx.turnOn();
-    statusPacketMarkers[0] = serialDataPacketsSent; // Mark the point where the PSU was turned ON
+    sessionRecordMark(SESSION_MARK_T1); // T1: Mark the point where the PSU was turned ON
     // T1
     while (true)
     {
       if ((millis() - startMillis) > 500)
       {
+          Atx.turnOff();
+          sessionEnd(false);
+
           Serial.println("PSU did not entered T2. Giving up.");
           if (v5sbOos & 0x02 > 0)
             Serial.println("+5VSB disappeared (!).");
           else if (v5sbOos)
             Serial.println("+5VSB falled out of spec (!)."); 
-
-          Serial.print(serialDataPacketsSent, DEC);
-          Serial.println(" Data packets sent.");
+            
           while (true);
       }
 
@@ -200,30 +228,27 @@ void loop() {
       if (!Atx.isV5sbPresent() || IsOutOfSpec(Atx.V5SB(), 5.0f))
         v5sbOos = (Atx.isV5sbPresent() ? 0x00 : 0x02) | 0x01;
 
-      if (Atx.V12() + Atx.V5() + Atx.V3_3() > 0.7f)
+      if (Atx.V12() + Atx.V5() + Atx.V3_3() > ON_OFF_RAIL_SUM_THRESHOLD)
         break; // Enter T2
     }
 
-    endMillis = millis();
-    statusPacketMarkers[1] = serialDataPacketsSent; // Mark the point where the PSU entered T2
+    sessionRecordMark(SESSION_MARK_T2); // T2: Mark the point where the PSU entered T2
 
     if (v5sbOos)
     {
+        Atx.turnOff();
+        sessionEnd(false);
+        
         if (v5sbOos & 0x02 > 0)
           Serial.println("+5VSB disappeared (!).");
         else if (v5sbOos)
           Serial.println("+5VSB falled out of spec (!).");
         
         Serial.println("Failed at T1");
-        delay(1000);
-        Atx.turnOff();
-
-        Serial.print(serialDataPacketsSent, DEC);
-        Serial.println(" Data packets sent.");
+        
         while (true);    
     }
 
-    unsigned long t1_t = endMillis - startMillis; // T1 time
     startMillis = millis();
     
     // T2
@@ -235,26 +260,21 @@ void loop() {
     float lastV5 = 0.0f;
     float lastV3_3 = 0.0f;
 
-    // TODO: Check if PWR_OK is not asserted before all rails are withing range
+    // TODO: Check if PWR_OK is not asserted before all rails are within range
 
     while (true)
     {
       if ((millis() - startMillis) > 1000)
       {
+          Atx.turnOff();
+          sessionEnd(false);
+
           Serial.println("PSU did not entered T3. Giving up.");
           if (v5sbOos & 0x02 > 0)
             Serial.println("+5VSB disappeared (!).");
           else if (v5sbOos)
             Serial.println("+5VSB falled out of spec (!)."); 
-
-          Serial.print("T1 lasted for ");
-          Serial.print(t1_t, DEC);
-          Serial.println("ms");
-          delay(1000);
-          Atx.turnOff();
-
-          Serial.print(serialDataPacketsSent, DEC);
-          Serial.println(" Data packets sent.");
+          
           while (true);
       }
 
@@ -280,49 +300,39 @@ void loop() {
         break; // Enter T3
     }
 
-    endMillis = millis();
-    statusPacketMarkers[2] = serialDataPacketsSent; // Mark the point where the PSU entered T3
+    sessionRecordMark(SESSION_MARK_T3); // T3: Mark the point where the PSU entered T3
     
     if (v5sbOos)
     {
+        Atx.turnOff();
+        sessionEnd(false);
+
         if (v5sbOos & 0x02 > 0)
           Serial.println("+5VSB disappeared (!).");
         else if (v5sbOos)
           Serial.println("+5VSB falled out of spec (!).");
         
         Serial.println("Failed at T2");
-        delay(1000);
-        Atx.turnOff();
-
-        Serial.print(serialDataPacketsSent, DEC);
-        Serial.println(" Data packets sent.");
+        
         while (true);    
     }
 
     // T3
-    unsigned long t2_t = endMillis - startMillis; // T2 time
     startMillis = millis();
 
     while (true)
     {
       if ((millis() - startMillis) > 5000)
       {
+          Atx.turnOff();
+          sessionEnd(false);
+
           Serial.println("PSU did not entered PON. Giving up.");
           if (v5sbOos & 0x02 > 0)
             Serial.println("+5VSB disappeared (!).");
           else if (v5sbOos)
             Serial.println("+5VSB falled out of spec (!)."); 
-
-          Serial.print("T1 lasted for ");
-          Serial.print(t1_t, DEC);
-          Serial.println("ms");
-
-          Serial.print("T2 lasted for ");
-          Serial.print(t2_t, DEC);
-          Serial.println("ms");
-
-          Serial.print(serialDataPacketsSent, DEC);
-          Serial.println(" Data packets sent.");
+            
           while (true);
       }
 
@@ -337,137 +347,126 @@ void loop() {
         break;
     }
 
-    endMillis = millis();
-    statusPacketMarkers[3] = serialDataPacketsSent; // Mark the point where the PSU entered PON
+    sessionRecordMark(SESSION_MARK_ON); // ON: Mark the point where the PSU entered PON
 
     if (v5sbOos)
     {
+        Atx.turnOff();
+        sessionEnd(false);
+
         if (v5sbOos & 0x02 > 0)
           Serial.println("+5VSB disappeared (!).");
         else if (v5sbOos)
           Serial.println("+5VSB falled out of spec (!).");
         
         Serial.println("Failed at T3");
-        delay(1000);
-        Atx.turnOff();
-
-        Serial.print(serialDataPacketsSent, DEC);
-        Serial.println(" Data packets sent.");
+        
         while (true);    
     }
 
-    unsigned long t3_t = endMillis - startMillis; // T3 time
-
     // Reached PON
-    Serial.println("Boot sequence completed.");
-    Serial.print("T1 passed in ");
-    Serial.print(t1_t, DEC);
-    Serial.println("ms.");
-    Serial.print("T2 passed in ");
-    Serial.print(t2_t, DEC);
-    Serial.println("ms.");
-    Serial.print("T3 passed in ");
-    Serial.print(t3_t, DEC);
-    Serial.println("ms.");
-
-    Serial.print("PON reached in ");
-    Serial.print(t1_t + t2_t + t3_t, DEC);
-    Serial.println("ms.");
-
     startMillis = millis();
     byte oosflags = 0;
-    while ((millis() - startMillis) < 10000)
+    int maxOosRailData[4];
+    maxOosRailData[0] = 12.0f;
+    maxOosRailData[1] = 5.0f;
+    maxOosRailData[2] = 5.0f;
+    maxOosRailData[3] = 3.3f;
+    while ((millis() - startMillis) < 20000) // Record PSU activity for 20 seconds.
+    // Setting the above timeout value must be done while taking in consideration that if the psu has devices attached to it
+    // like mechanical hard disks (which should not be done while testing anyways), the controller should give enough time
+    // for them to be able to gain enough rotational speed for a full safe parking procedure. This takes about 15 seconds
+    // for fast RPM disks with slow controllers
     {
         // Check if PSU is stable
         updateStatus();
         if (IsOutOfSpec(Atx.V12(), 12.0f))
         {
-            if ((oosflags & 0b00000001) == 0)
-            {
-                Serial.print("V12 is out of specs!. ");
-                Serial.println(Atx.V12(), DEC);
-                oosflags |= 0b00000001;
-            }
+            if (abs(maxOosRailData[0] - 12.0f) < abs(Atx.V12() - 12.0f)) maxOosRailData[0] = Atx.V12();
+            oosflags |= 0b00000001;
         }
 
         if (IsOutOfSpec(Atx.V5(), 5.0f))
         {
-            if ((oosflags & 0b00000010) == 0)
-            {
-                Serial.print("V5 is out of specs!. ");
-                Serial.println(Atx.V5(), DEC);
-                oosflags |= 0b00000010;
-            }
+            if (abs(maxOosRailData[1] - 5.0f) < abs(Atx.V5() - 5.0f)) maxOosRailData[1] = Atx.V5();
+            oosflags |= 0b00000010;
         }
 
         if (IsOutOfSpec(Atx.V5SB(), 5.0f))
         {
-            if ((oosflags & 0b00000100) == 0)
-            {
-                Serial.print("V5SB is out of specs!. ");
-                Serial.println(Atx.V5SB(), DEC);
-                oosflags |= 0b00000100;
-            }
+            if (abs(maxOosRailData[2] - 5.0f) < abs(Atx.V5SB() - 5.0f)) maxOosRailData[2] = Atx.V5SB();
+            oosflags |= 0b00000100;
         }
 
         if (IsOutOfSpec(Atx.V3_3(), 3.3f))
         {
-            if ((oosflags & 0b00001000) == 0)
-            {
-                Serial.print("V3.3 is out of specs!. ");
-                Serial.println(Atx.V3_3(), DEC);
-                oosflags |= 0b00001000;
-            }
+            if (abs(maxOosRailData[3] - 3.3f) < abs(Atx.V3_3() - 3.3f)) maxOosRailData[3] = Atx.V3_3();
+            oosflags |= 0b00001000;
         }
 
         if (!Atx.isPgGoodPresent())
-        {
-            if ((oosflags & 0b00010000) == 0)
-            {
-                Serial.print("PWR_OK disappeared!. ");
-                oosflags |= 0b00001000;
-            }
-        }     
+                oosflags |= 0b00010000;
     }
-
-    Serial.print("All rails are stable. OOS error code: 0x");
-    Serial.println(oosflags, HEX);
 
     // POFF
     Atx.turnOff();
-    statusPacketMarkers[4] = serialDataPacketsSent; // Mark the point where the PSU was turned off
+    sessionRecordMark(SESSION_MARK_T6); // T6: Mark the point where the PSU was turned off
 
     // Record turnoff curve
     startMillis = millis();
-    while ((millis() - startMillis) < 3000)
-      updateStatus();
-
-    // Send marker packets
-    Serial.write(DATA_MARKER_METADATA_START); // begin data
-    sendSerialInt(statusPacketMarkers[0]);
-    sendSerialInt(statusPacketMarkers[1]);
-    sendSerialInt(statusPacketMarkers[2]);
-    sendSerialInt(statusPacketMarkers[3]);
-    sendSerialInt(statusPacketMarkers[4]);
-    sendSerialInt(0x00); // Send 2 reserved null bytes
-    sendSerialInt(0x00); // Send 2 reserved null bytes
-    sendSerialInt(0x00); // Send 2 reserved null bytes
-    
-    Serial.print(serialDataPacketsSent, DEC);
-    Serial.println(" Data packets sent.");
-
-    // Beep 3 times to signal a good PSU
-    digitalWrite(PSU_OK, HIGH);
-    for (int i = 1; i <= 3; i++)
+    bool active = true;
+    while ((millis() - startMillis) < 5000) // Record deactivation curve for 5seconds
     {
-      buzzer.beep();
-      while (buzzer.isBeeping())
-        buzzer.update();
-
-      delay(350);
+      if (active && Atx.V12() + Atx.V5() + Atx.V3_3() < ON_OFF_RAIL_SUM_THRESHOLD)
+      {
+        active = false;
+        sessionRecordMark(SESSION_MARK_POFF); // TPOFF: Mark the point where the PSU reached POFF state
+      }
+      
+      updateStatus();
     }
+      
 
-    Serial.println("PSU is GOOD");
+    if (oosflags == 0)
+    {
+      sessionEnd(true);
+      Serial.print("All rails are stable and within spec. [OOS:0x0]");
+    }
+    else
+    {
+      sessionEnd(false);
+      Serial.print("PSU is outside specs. OOS error code: [OOS:0x");
+      Serial.print(oosflags, HEX);
+      Serial.println("]");
+
+      if ((oosflags & 0b00000001) > 0)
+      {
+          Serial.print("V12 is out of specs!. ");
+          Serial.print(maxOosRailData[0], DEC);
+          Serial.println("mV");
+      }
+      if ((oosflags & 0b00000010) > 0)
+      {
+          Serial.print("V5 is out of specs!. ");
+          Serial.print(maxOosRailData[1], DEC);
+          Serial.println("mV");
+      }
+      if ((oosflags & 0b00000100) > 0)
+      {
+          Serial.print("V5SB is out of specs!. ");
+          Serial.print(maxOosRailData[2], DEC);
+          Serial.println("mV");
+      }
+      if ((oosflags & 0b00001000) > 0)
+      {
+          Serial.print("V3_3 is out of specs!. ");
+          Serial.print(maxOosRailData[3], DEC);
+          Serial.println("mV");
+      }
+
+      if ((oosflags & 0b00010000) > 0)
+          Serial.print("PWR_OK disappeared!. ");
+    }
     
     while (true);
   }
@@ -553,14 +552,151 @@ void sendSerialInt(int value)
   Serial.write(b);
 }
 
+void sendSerialLong(long value)
+{
+  int i = ((value & 0xffff0000) >> 16);
+  sendSerialInt(i);
+
+  i = (value & 0xffff);
+  sendSerialInt(i);
+}
+
+void sessionStart()
+{
+  for (int i = 0; i < SESSION_TOTAL_MARKS; i++)
+  {
+    sessionTimeMarks[i] = 0;
+    sessionPacketMarks[i] = 0;
+  }
+  
+  Serial.println("[SESS_START]");
+  sessionStartMicros = micros();
+  serialDataPacketsSent = 0;
+}
+
+void sessionRecordMark(int index) {
+  sessionPacketMarks[index] = serialDataPacketsSent;
+  sessionTimeMarks[index] = micros() - sessionStartMicros;
+}
+
+void sessionEnd(bool success) {
+  unsigned long endMicros = micros();
+
+  unsigned long t1_t = sessionTimeMarks[1] - sessionTimeMarks[0]; // T2 - T1
+  unsigned long t2_t = sessionTimeMarks[2] - sessionTimeMarks[1]; // T3 - T2
+  unsigned long t3_t = sessionTimeMarks[3] - sessionTimeMarks[2]; // PON - T3
+  unsigned long on_t = sessionTimeMarks[4] - sessionTimeMarks[3]; // T6 - PON
+  unsigned long off_t = sessionTimeMarks[5] - sessionTimeMarks[4]; // POFF - T6
+  
+  if (success) 
+  {   
+    Serial.println("Power up sequence completed.");
+    Serial.print("T1 passed in ");
+    Serial.print(t1_t, DEC);
+    Serial.println("us.");
+    Serial.print("T2 passed in ");
+    Serial.print(t2_t, DEC);
+    Serial.println("us.");
+    Serial.print("T3 passed in ");
+    Serial.print(t3_t, DEC);
+    Serial.println("us.");
+
+    Serial.print("Was ON for ");
+    Serial.print(on_t, DEC);
+    Serial.println("us.");
+
+    Serial.print("T6 passed in ");
+    Serial.print(off_t, DEC);
+    Serial.println("us.");
+
+    Serial.print("PON reached in ");
+    Serial.print(t1_t + t2_t + t3_t, DEC);
+    Serial.println("us.");
+
+    // Beep 3 times and signal a good PSU
+    digitalWrite(PSU_OK, HIGH);
+    Serial.println("PSU is GOOD");
+    for (int i = 1; i <= 3; i++)
+    {
+      buzzer.beep();
+      while (buzzer.isBeeping())
+        buzzer.update();
+
+      delay(350);
+    }
+  }
+  else {
+    Serial.print("Power up sequence failed.");
+
+    if (sessionPacketMarks[0] > 0 && sessionPacketMarks[1] > 0) // T1
+    {
+      Serial.print("T1 lasted ");
+      Serial.print(t1_t, DEC);
+      Serial.println("us.");
+    }
+
+    if (sessionPacketMarks[2] > 0) // T2
+    {
+      Serial.print("T2 lasted ");
+      Serial.print(t2_t, DEC);
+      Serial.println("us.");
+    }
+
+    if (sessionPacketMarks[3] > 0) // T3
+    {
+      Serial.print("T3 lasted ");
+      Serial.print(t3_t, DEC);
+      Serial.println("us.");
+    }
+
+    if (sessionPacketMarks[4] > 0) // ON
+    {
+      Serial.print("Was ON for ");
+      Serial.print(on_t, DEC);
+      Serial.println("us.");
+    }
+
+    if (sessionPacketMarks[5] > 0) // T6
+    {
+      Serial.print("T6 passed in ");
+      Serial.print(off_t, DEC);
+      Serial.println("us.");
+    }
+
+    // Beep 1 long time and signal a bad PSU
+    digitalWrite(PSU_OK, LOW);
+    Serial.println("PSU is BAD");
+    buzzer.beep();
+    delay(1200); // 1.2 sec
+    while (buzzer.isBeeping())
+        buzzer.update();
+  }
+
+  // Send statistics packets
+  // Send marker packets
+  Serial.write(DATA_MARKER_METADATA_START); // begin data
+  Serial.write(48); // Metadata length: (4 bytes of sessionPacketMarks + sessionTimeMarks) times sessionPacketMarks.length
+  for (int i = 0; i < SESSION_TOTAL_MARKS; i++)
+  {
+    sendSerialLong(sessionPacketMarks[i]); // 4 bytes
+    sendSerialLong(sessionTimeMarks[i]); // 4 bytes
+  } // total of 48 data bytes
+
+  Serial.println("[SESS_END]");
+}
+
 void updateStatus()
 {
   /*
-   * Protocol version: 1.1
+   * Protocol version: 1.2
    * 1 bit preamble (H) + 63 bits data
    */
 
    Atx.update();
+
+   unsigned long currmicros = micros();
+   unsigned long timeoffset = lastUpdateMicros - currmicros;
+   lastUpdateMicros = currmicros;
 
    // Send voltages over serial as Ints trimmed to the specified bit count
    int v12 = Atx.V12() * 1000.0f; // 14 bits: max=16383mv
@@ -576,11 +712,22 @@ void updateStatus()
    /* --- */                                 v12  |= 0b1000000000000000; // Always set
    if (BOARD_PSU_MODE)                       v12  |= 0b0100000000000000; // BOARD_PSU_MODE
 
-   if (IsOutOfSpec(Atx.V12(), 12.0f))        v5   |= 0b1000000000000000; // V12_OOS
-   if (IsOutOfSpec(Atx.V5(), 5.0f))          v5   |= 0b0100000000000000; // V5_OOS
-   if (IsOutOfSpec(Atx.V3_3(), 3.3f))        v5   |= 0b0010000000000000; // V3_3_OOS
+   if (timeoffset < 128) // A value greater than 127 will be treated as an overflow on the receiver. Its numeric interpretation is up to it
+   {
+      if (timeoffset & 0b01000000 > 0)       v5   |= 0b1000000000000000; // Timeoffset b6
+      if (timeoffset & 0b00100000 > 0)       v5   |= 0b0100000000000000; // Timeoffset b5
+      if (timeoffset & 0b00010000 > 0)       v5   |= 0b0010000000000000; // Timeoffset b4
 
-   if (IsOutOfSpec(Atx.V5SB(), 5.0f))        v5sb |= 0b1000000000000000; // V5SB_OOS
+      if (timeoffset & 0b00001000 > 0)       v5sb |= 0b1000000000000000; // Timeoffset b3
+   }
+   else
+   {
+      // Clear 3 MSB from v5
+      v5 &= 0b0001111111111111;
+      // Clear 1 MSB from v5sb
+      v5sb &= 0b0111111111111111;
+   }
+   
    if (PSU_OK_ACTIVE)                        v5sb |= 0b0100000000000000; // PSU_OK_ACTIVE
    if (Atx.isTriggered())                    v5sb |= 0b0010000000000000; // ATX_IS_TRIGGERED
 

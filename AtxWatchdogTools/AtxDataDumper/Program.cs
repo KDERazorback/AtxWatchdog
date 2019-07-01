@@ -8,6 +8,8 @@ namespace AtxDataDumper
 {
     class Program
     {
+        // Note: In Packed protocol mode, status data is sent along with a timestamp and rail data in 8 bytes.
+
         private const byte DATA_PACKET_START = 0x11; // From Arduino code
         private const byte STATUS_PACKET_START = 0x12; // From Arduino code
         private const byte METADATA_PACKET_START = 0x13; // From Arduino code
@@ -48,7 +50,7 @@ namespace AtxDataDumper
 
             string serialAddress = args[0].Trim().ToUpperInvariant();
 
-            SerialPort port = new SerialPort(serialAddress, 115200, Parity.None, 8, StopBits.One);
+            SerialPort port = new SerialPort(serialAddress, 2000000, Parity.None, 8, StopBits.One);
             port.DtrEnable = true;
             port.RtsEnable = false;
 
@@ -81,6 +83,7 @@ namespace AtxDataDumper
             bool isDataPacket = false;
             bool isStatusPacket = false;
             bool isMetadataPacket = false;
+            int metadataLength = 0;
 
             while (port.IsOpen && !abortSignalRequested)
             {
@@ -98,7 +101,12 @@ namespace AtxDataDumper
                             else if (isStatusPacket)
                                 statusStream.WriteByte(buffer[i]);
                             else if (isMetadataPacket)
-                                metadataStream.WriteByte(buffer[i]);
+                            {
+                                if (metadataLength == 0)
+                                    metadataLength = buffer[i];
+                                else
+                                    metadataStream.WriteByte(buffer[i]);
+                            }
                             else
                             {
                                 if (buffer[i] == DATA_PACKET_START)
@@ -121,6 +129,7 @@ namespace AtxDataDumper
                                 {
                                     // Begin metadata packet
                                     metadataStream.Seek(0, SeekOrigin.Begin);
+                                    metadataLength = 0;
                                     isMetadataPacket = true;
                                     continue;
                                 }
@@ -165,7 +174,7 @@ namespace AtxDataDumper
                                 ProcessStatusPacket(ref statusStream, false);
                             }
 
-                            if (metadataStream.Length >= 16)
+                            if (metadataStream.Length >= metadataLength)
                             {
                                 // End metadata packet
                                 isMetadataPacket = false;
@@ -254,20 +263,31 @@ namespace AtxDataDumper
             if (packedProtocol)
             {
                 // 8 bytes protocol length
+                byte[] buffer = new byte[8];
 
-                if (stream.Length < 8)
+                if (stream.Length % 8 != 0 || stream.Read(buffer, 0, buffer.Length) != 8)
                     throw new DataMisalignedException("Input data is not aligned properly");
 
-                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00111111)); // Hi
-                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
-                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00011111)); // Hi
-                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
-                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00011111)); // Hi
-                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
-                dataStream.WriteByte((byte) (stream.ReadByte() & 0b00011111)); // Hi
-                dataStream.WriteByte((byte) stream.ReadByte()); // Lo
+                // Reassemble time-offset data
+                byte offset = 0;
+                offset |= (byte)(buffer[0] & 0b11100000); // 3 bits from v5
+                offset |= (byte)((buffer[0] & 0b10000000) >> 3); // 1 bit  from v5sb
+                offset >>= 1; // Align data
+                if (offset == 0)
+                    offset = 128; // Overflow
 
-                dataDataLength += 8;
+                dataStream.WriteByte(offset); // Write offset
+
+                dataStream.WriteByte((byte) (buffer[0] & 0b00111111)); // Hi
+                dataStream.WriteByte(buffer[1]); // Lo
+                dataStream.WriteByte((byte) (buffer[2] & 0b00011111)); // Hi
+                dataStream.WriteByte(buffer[3]); // Lo
+                dataStream.WriteByte((byte) (buffer[4] & 0b00011111)); // Hi
+                dataStream.WriteByte(buffer[5]); // Lo
+                dataStream.WriteByte((byte) (buffer[6] & 0b00011111)); // Hi
+                dataStream.WriteByte(buffer[7]); // Lo
+
+                dataDataLength += 8 + 1; // 8 data bytes written + 1 time offset byte written
 
                 ProcessStatusPacket(ref stream, true);
             }
@@ -287,40 +307,43 @@ namespace AtxDataDumper
             if (packedProtocol)
             {
                 byte b1 = 0;
-                byte b2 = 0;
+                /* B1 mapping in output data
+                 * b7 -- PS_ON present      --- MSB
+                 * b6 -- PWR_OK present
+                 * b5 -- Buzzer is beeping
+                 * b4 -- Reserved. Always 1
+                 * b3 -- Reserved. Always 1
+                 * b2 -- PSU_MODE
+                 * b1 -- PSU_OK_ACTIVE
+                 * b0 -- ATX_IS_TRIGGERED   --- LSB
+                 */
 
                 byte input = (byte) stream.ReadByte(); // V12 WORD
                 stream.ReadByte(); // Discard 1 byte
 
-                if ((input & 0b01000000) > 0) b2 = 1;
+                if ((input & 0b01000000) > 0) b1 |= 0b00000100; // Board PSU_MODE
 
-                input = (byte) stream.ReadByte(); // V5 WORD
-                stream.ReadByte(); // Discard 1 byte
-
-                if ((input & 0b10000000) > 0) b1 |= 0b00100000; // V12_OOS
-                if ((input & 0b01000000) > 0) b1 |= 0b00010000; // V5_OOS
-                if ((input & 0b00100000) > 0) b1 |= 0b00000100; // V3_3_OOS
+                stream.ReadByte(); // DISCARD V5 ENTIRELY
+                stream.ReadByte();
 
                 input = (byte) stream.ReadByte(); // V5SB WORD
                 stream.ReadByte(); // Discard 1 byte
 
-                if ((input & 0b10000000) > 0) b1 |= 0b00001000; // V5SB_OOS
                 if ((input & 0b01000000) > 0) b1 |= 0b00000010; // PSU_OK_ACTIVE
                 if ((input & 0b00100000) > 0) b1 |= 0b00000001; // ATX_IS_TRIGGERED
 
                 input = (byte) stream.ReadByte(); // V3_3 H-WORD
 
                 if ((input & 0b10000000) > 0) b1 |= 0b01000000; // PWR_OK Present
-                if ((input & 0b01000000) > 0) b1 |= 0b10000010; // PS_ON Present
-                if ((input & 0b00100000) > 0) b2 |= 0b01000000; // Buzzer is beeping
+                if ((input & 0b01000000) > 0) b1 |= 0b10000000; // PS_ON Present
+                if ((input & 0b00100000) > 0) b1 |= 0b00100000; // Buzzer is beeping
 
                 // Fill reserved bytes
-                b2 |= 0b00111111;
+                b1 |= 0b00011000;
 
                 statusStream.WriteByte(b1);
-                statusStream.WriteByte(b2);
 
-                statusDataLength += 2;
+                statusDataLength += 1;
             }
             else
             {

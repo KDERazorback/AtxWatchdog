@@ -211,7 +211,8 @@ namespace AtxCsvPlotter.Endpoints
             "T2",
             "T3",
             "ON",
-            "T6"
+            "T6",
+            "OFF"
         };
 
         /// <summary>
