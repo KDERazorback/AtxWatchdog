@@ -36,11 +36,15 @@ namespace AtxCsvPlotter.Endpoints.Png
             Dictionary<Rails, float[]> series = new Dictionary<Rails, float[]>();
 
             float[][] data = LoadMatrix(inputFilename, hasHeaders, out string[] headers);
+            float[] timeSeries = null;
             for (int i = 0; i < headers.Length; i++)
             {
                 Rails rail;
                 if (Rails.TryParse(headers[i], true, out rail))
                     series.Add(rail, data[i]);
+
+                if (headers[i] == "t0")
+                    timeSeries = data[i];
             }
 
             series = SortMatrix(series);
@@ -110,11 +114,17 @@ namespace AtxCsvPlotter.Endpoints.Png
 
             // HAxis
             stepValue = (float)PlotSpace.Width / Config.HAxisSteps;
-
+            float timeStep = timeSeries.Length / Config.HAxisSteps;
+            ulong timeOffset = 0;
             for (int i = 0; i <= Config.HAxisSteps; i++)
             {
                 int x = (int)(stepValue * i);
-                string xlabel = x.ToString("N0");
+
+                timeOffset = 0;
+                for (int w = 0; w < (timeStep * i); w++)
+                    timeOffset += (ulong)timeSeries[w];
+
+                string xlabel = (timeOffset / 1000.0f).ToString("N1"); // In ms
                 Device.DrawLine(new Pen(Config.GridBrush, (float)InchesToPixels(Config.GridThickness)),
                     PointToPixelSpace(new PointF(x, 0)),
                     PointToPixelSpace(new PointF(x, PlotSpace.Height))
@@ -124,6 +134,8 @@ namespace AtxCsvPlotter.Endpoints.Png
                 SizeF labelSize = Device.MeasureString(xlabel, rasterAxisFont);
                 lastLabelSize = new Size((int)labelSize.Width, (int)labelSize.Height);
                 Point labelPos = PointToPixelSpace(new PointF(x, 0 - Config.AxisThickness));
+                if (i % 2 > 0)
+                    labelPos.Offset(0, (int)labelSize.Height);
                 lastLabelPos = labelPos;
                 labelPos = new Point((int) (labelPos.X - (labelSize.Width / 2)), (int)(labelPos.Y));
                 Device.DrawString(xlabel, rasterAxisFont, Config.AxisLabelBrush, labelPos);
@@ -137,7 +149,7 @@ namespace AtxCsvPlotter.Endpoints.Png
                 SizeF stringSize = Device.MeasureString(Config.AxesNames[1], rasterFont);
 
                 Point pos = PointToPixelSpace(new PointF(PlotSpace.Width / 2.0f, 0 - Config.AxisThickness));
-                pos = new Point((int)(pos.X - (stringSize.Width / 2.0f)), (int)(pos.Y + lastLabelSize.Height + stringSize.Height));
+                pos = new Point((int)(pos.X - (stringSize.Width / 2.0f)), (int)(pos.Y + lastLabelSize.Height + (stringSize.Height * 1.5f)));
 
                 Device.DrawString(Config.AxesNames[1], rasterFont, Config.AxisLabelBrush,
                     pos);
@@ -163,16 +175,16 @@ namespace AtxCsvPlotter.Endpoints.Png
             // Draw metadata
             if (!string.IsNullOrWhiteSpace(Config.MetadataFile) && Config.MetadataLinesColors != null && Config.MetadataLinesColors.Length > 0)
             {
-                long[] markers = LoadMetadataMarkers(Config.MetadataFile);
+                long[][] markers = LoadMetadataMarkers(Config.MetadataFile);
                 Font rasterFont = RasterFont(Config.MetadataFont);
 
                 for (int i = 0; i < markers.Length; i++)
                 {
-                    if (markers[i] == 0)
+                    if (markers[i][0] == 0)
                         continue; // Ignore empty markers
 
-                    Point a = PointToPixelSpace(new PointF(markers[i] * stepValue, 0));
-                    Point b = PointToPixelSpace(new PointF(markers[i] * stepValue, PlotSpace.Height));
+                    Point a = PointToPixelSpace(new PointF(markers[i][0] * stepValue, 0));
+                    Point b = PointToPixelSpace(new PointF(markers[i][0] * stepValue, PlotSpace.Height));
                     int penIndex = i;
                     while (penIndex >= Config.MetadataLinesColors.Length)
                         penIndex -= Config.MetadataLinesColors.Length;
@@ -185,10 +197,20 @@ namespace AtxCsvPlotter.Endpoints.Png
                     if (!string.IsNullOrWhiteSpace(tag))
                     {
                         SizeF labelSize = Device.MeasureString(tag, rasterFont);
-                        Point pos = PointToPixelSpace(new PointF(markers[i] * stepValue, PlotSpace.Height));
+                        string label2 = (markers[i][1] / 1000.0f).ToString("N1") + "ms.";
+                        SizeF label2Size = Device.MeasureString(label2, rasterFont);
+                        Point pos = PointToPixelSpace(new PointF(markers[i][0] * stepValue, PlotSpace.Height));
                         pos.Offset(-(int) (labelSize.Width / 2.0f),
                             (int) ((labelSize.Height) * (i % 2 == 0 ? 1 : 2) * (i % 3 == 0 ? -1 : 1)));
                         Device.DrawString(tag, rasterFont, new SolidBrush(p.Color), pos);
+
+                        if (Config.DrawTimestampsOnMarkers)
+                        {
+                            pos = PointToPixelSpace(new PointF(markers[i][0] * stepValue, PlotSpace.Height + labelSize.Height));
+                            pos.Offset(-(int) (label2Size.Width / 2.0f),
+                                (int) ((label2Size.Height) * (i % 2 == 0 ? 1 : 2) * (i % 3 == 0 ? -1 : 1)));
+                            Device.DrawString(label2, rasterFont, new SolidBrush(p.Color), pos);
+                        }
                     }
                 }
             }

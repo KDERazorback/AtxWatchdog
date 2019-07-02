@@ -229,5 +229,10 @@ namespace AtxCsvPlotter.Endpoints
         /// Specifies the font to use when drawing Metadata on the Plot
         /// </summary>
         public Font MetadataFont { get; set; } = new Font("Arial", 12.0f, GraphicsUnit.Point);
+
+        /// <summary>
+        /// Indicates if the plot should contain timestamps from the markers extracted from the metadata
+        /// </summary>
+        public bool DrawTimestampsOnMarkers { get; set; } = false;
     }
 }

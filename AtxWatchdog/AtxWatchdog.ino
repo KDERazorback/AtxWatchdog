@@ -108,7 +108,7 @@ void setup() {
   Atx.setV5sbCoefficients (0                     , 0.000000144284615f , -0.000188086682585f, 0.089558333834226f , -12.314665470356156f);
   Atx.setV3_3Coefficients (0.000000000158821f    , -0.000000279452017f, 0.000186315759286f , -0.050800891265817f, 6.1451224275267f    );
 
-  Atx.setSamplingAvgCount(1);
+  Atx.setSamplingAvgCount(2);
 
   // Signal BOOT complete
   Serial.println("Boot OK");
@@ -206,6 +206,7 @@ void loop() {
     bool v5sbOos = false; // Indicates if V5SB falled below spec during this step
     Atx.turnOn();
     sessionRecordMark(SESSION_MARK_T1); // T1: Mark the point where the PSU was turned ON
+    startMillis = millis();
     // T1
     while (true)
     {
@@ -248,8 +249,6 @@ void loop() {
         
         while (true);    
     }
-
-    startMillis = millis();
     
     // T2
     bool v12decayed = false;
@@ -261,6 +260,8 @@ void loop() {
     float lastV3_3 = 0.0f;
 
     // TODO: Check if PWR_OK is not asserted before all rails are within range
+
+    startMillis = millis();
 
     while (true)
     {
@@ -365,13 +366,13 @@ void loop() {
     }
 
     // Reached PON
-    startMillis = millis();
     byte oosflags = 0;
     int maxOosRailData[4];
     maxOosRailData[0] = 12.0f;
     maxOosRailData[1] = 5.0f;
     maxOosRailData[2] = 5.0f;
     maxOosRailData[3] = 3.3f;
+    startMillis = millis();
     while ((millis() - startMillis) < 20000) // Record PSU activity for 20 seconds.
     // Setting the above timeout value must be done while taking in consideration that if the psu has devices attached to it
     // like mechanical hard disks (which should not be done while testing anyways), the controller should give enough time
@@ -413,8 +414,8 @@ void loop() {
     sessionRecordMark(SESSION_MARK_T6); // T6: Mark the point where the PSU was turned off
 
     // Record turnoff curve
-    startMillis = millis();
     bool active = true;
+    startMillis = millis();
     while ((millis() - startMillis) < 5000) // Record deactivation curve for 5seconds
     {
       if (active && Atx.V12() + Atx.V5() + Atx.V3_3() < ON_OFF_RAIL_SUM_THRESHOLD)
@@ -587,6 +588,8 @@ void sessionEnd(bool success) {
   unsigned long t3_t = sessionTimeMarks[3] - sessionTimeMarks[2]; // PON - T3
   unsigned long on_t = sessionTimeMarks[4] - sessionTimeMarks[3]; // T6 - PON
   unsigned long off_t = sessionTimeMarks[5] - sessionTimeMarks[4]; // POFF - T6
+
+  delay(350); // If we do not stop for a second, the serial port appears to overflow in chinese boards
   
   if (success) 
   {   
@@ -626,7 +629,7 @@ void sessionEnd(bool success) {
     }
   }
   else {
-    Serial.print("Power up sequence failed.");
+    Serial.println("Power up sequence failed.");
 
     if (sessionPacketMarks[0] > 0 && sessionPacketMarks[1] > 0) // T1
     {

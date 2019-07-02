@@ -232,7 +232,7 @@ namespace AtxCsvPlotter.Endpoints
                         for (int i = 0; i < cells.Length; i++)
                         {
                             float v = float.Parse(cells[i]);
-                            if (v > maxValue)
+                            if (v > maxValue && i > 0)
                                 maxValue = v;
 
                             matrix[i].Add(v);
@@ -295,28 +295,45 @@ namespace AtxCsvPlotter.Endpoints
         /// </summary>
         /// <param name="filename">File to load</param>
         /// <returns>A list of markers from the specified metadata file</returns>
-        protected long[] LoadMetadataMarkers(string filename)
+        protected long[][] LoadMetadataMarkers(string filename)
         {
-            List<long> markers = new List<long>();
+            List<long[]> markers = new List<long[]>();
 
             using (FileStream fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 while (fs.CanRead && fs.Position < fs.Length)
                 {
-                    int valh = fs.ReadByte();
-                    int vall = fs.ReadByte();
-                    if (valh < 0 || vall < 0)
+                    long value = ReadLongFromStream(fs);
+
+                    if (value < 1)
                         break;
 
-                    long value = valh;
-                    value <<= 8;
-                    value += vall;
+                    long time = ReadLongFromStream(fs);
 
-                    markers.Add(value);
+                    markers.Add(new long[] { value, time });
                 }
             }
 
             return markers.ToArray();
+        }
+
+        protected virtual long ReadLongFromStream(Stream stream)
+        {
+            int valh1 = stream.ReadByte();
+            int vall1 = stream.ReadByte();
+            int valh2 = stream.ReadByte();
+            int vall2 = stream.ReadByte();
+
+            long value = valh1;
+            value <<= 8;
+            value += vall1;
+
+            value <<= 8;
+            value += valh2;
+            value <<= 8;
+            value += vall2;
+
+            return value;
         }
     }
 }
