@@ -38,6 +38,8 @@ namespace AtxDataDumper
                 Console.WriteLine("Available ports.");
                 foreach (string name in SerialPort.GetPortNames())
                     Console.WriteLine("\t" + name);
+                Console.WriteLine();
+                Console.WriteLine("An input file can be specified instead of a Serial port address, in order to read from it.");
 #if DEBUG
                 Console.WriteLine();
                 Console.WriteLine("Press any key to exit");
@@ -49,30 +51,57 @@ namespace AtxDataDumper
             Console.CancelKeyPress += ConsoleOnCancelKeyPress;
 
             string serialAddress = args[0].Trim().ToUpperInvariant();
+            bool isUsingSerial = true;
+            SerialPort port = null;
+            FileStream fs = null;
 
-            SerialPort port = new SerialPort(serialAddress, 2000000, Parity.None, 8, StopBits.One);
-            port.DtrEnable = true;
-            port.RtsEnable = false;
-
-            try
+            if (File.Exists(serialAddress))
             {
-                port.Open();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Cannot open serial port. Press any key to exit");
-                Console.WriteLine(e);
+                try
+                {
+                    isUsingSerial = false;
+                    Console.WriteLine("Reading from local file stream: " + serialAddress);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Cannot open file. Press any key to exit");
+                    Console.WriteLine(e);
 #if DEBUG
-                Console.WriteLine();
-                Console.WriteLine("Press any key to exit");
-                Console.ReadKey();
+                    Console.WriteLine();
+                    Console.WriteLine("Press any key to exit");
+                    Console.ReadKey();
 #endif
-                return;
+                    return;
+                }
+                fs = new FileStream(serialAddress, FileMode.Open, FileAccess.Read, FileShare.Read);
+                Console.WriteLine("File opened.");
+            }
+            else
+            {
+                Console.WriteLine("Reading from Serial port: " + serialAddress.ToUpperInvariant());
+                port = new SerialPort(serialAddress, 2000000, Parity.None, 8, StopBits.One);
+                port.DtrEnable = true;
+                port.RtsEnable = false;
+
+                try
+                {
+                    port.Open();
+                    Console.WriteLine("Port opened.");
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Cannot open serial port. Press any key to exit");
+                    Console.WriteLine(e);
+#if DEBUG
+                    Console.WriteLine();
+                    Console.WriteLine("Press any key to exit");
+                    Console.ReadKey();
+#endif
+                    return;
+                }
             }
 
-            Console.WriteLine("Port opened.");
-
-            OpenStreams();
+            OpenStreams(isUsingSerial);
 
             byte[] buffer = new byte[4096];
             MemoryStream dataStream = new MemoryStream(buffer.Length);
@@ -85,14 +114,21 @@ namespace AtxDataDumper
             bool isMetadataPacket = false;
             int metadataLength = 0;
 
-            while (port.IsOpen && !abortSignalRequested)
+            while ((!isUsingSerial || port.IsOpen) && !abortSignalRequested)
             {
                 try
                 {
-                    while (port.BytesToRead > 0)
+                    while ((!isUsingSerial || port.BytesToRead > 0) && !abortSignalRequested)
                     {
-                        int read = port.Read(buffer, 0, buffer.Length);
-                        rawStream.Write(buffer, 0, read);
+                        int read;
+                        if (isUsingSerial)
+                        {
+                            read = port.Read(buffer, 0, buffer.Length);
+                            rawStream.Write(buffer, 0, read);
+                        }
+                        else
+                            read = fs.Read(buffer, 0, buffer.Length);
+
 
                         for (int i = 0; i < read; i++)
                         {
@@ -191,19 +227,26 @@ namespace AtxDataDumper
                 }
             }
 
-            
-            Thread t = new Thread(() =>
+            if (isUsingSerial)
             {
-                if (port.IsOpen)
+                Thread t = new Thread(() =>
                 {
-                    port.DtrEnable = false;
-                    port.DiscardInBuffer();
-                    port.DiscardOutBuffer();
-                    port.Close();
-                }
-            });
-            t.Start();
-            t.Join();
+                    if (port.IsOpen)
+                    {
+                        port.DtrEnable = false;
+                        port.DiscardInBuffer();
+                        port.DiscardOutBuffer();
+                        port.Close();
+                    }
+                });
+                t.Start();
+                t.Join();
+            }
+            else
+            {
+                fs.Close();
+                fs.Dispose();
+            }
             
 
             dataStream.Dispose();
@@ -229,11 +272,14 @@ namespace AtxDataDumper
             consoleCancelEventArgs.Cancel = true;
         }
 
-        private static void OpenStreams()
+        private static void OpenStreams(bool openRawStream)
         {
             dataStream = new FileStream(".\\datastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
             statusStream = new FileStream(".\\statusstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
-            rawStream = new FileStream(".\\rawstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+
+            if (openRawStream)
+                rawStream = new FileStream(".\\rawstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+
             metadataStream = new FileStream(".\\metadatastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
             textStream = new FileStream(".\\textstream.txt", FileMode.Create, FileAccess.Write, FileShare.None);
         }
@@ -242,9 +288,12 @@ namespace AtxDataDumper
         {
             dataStream.Flush(true);
             dataStream.Dispose();
-            
-            rawStream.Flush(true);
-            rawStream.Dispose();
+
+            if (rawStream != null)
+            {
+                rawStream.Flush(true);
+                rawStream.Dispose();
+            }
 
             statusStream.Flush(true);
             statusStream.Dispose();
@@ -271,7 +320,7 @@ namespace AtxDataDumper
                 // Reassemble time-offset data
                 byte offset = 0;
                 offset |= (byte)(buffer[0] & 0b11100000); // 3 bits from v5
-                offset |= (byte)((buffer[0] & 0b10000000) >> 3); // 1 bit  from v5sb
+                offset |= (byte)((buffer[2] & 0b10000000) >> 3); // 1 bit  from v5sb
                 offset >>= 1; // Align data
                 if (offset == 0)
                     offset = 128; // Overflow

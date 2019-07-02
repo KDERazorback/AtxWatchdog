@@ -13,7 +13,7 @@ namespace AtxCsvDataConverter
                 Console.WriteLine("Usage:");
                 Console.WriteLine("  atxcsv.exe <binFile1> ... [binFileN]");
                 Console.WriteLine(" This tool will convert all specified files to CSV sheets. Output files will be named according to input files");
-                Console.WriteLine(" This tool is compatible with v1.2 of the protocol only.");
+                Console.WriteLine(" This tool is only compatible with v1.2 of the communications protocol.");
 #if DEBUG
                 Console.WriteLine();
                 Console.WriteLine("Press any key to exit");
@@ -52,7 +52,9 @@ namespace AtxCsvDataConverter
                                     break;
                                 }
 
-                                byte stamp = buffer[0];
+                                int stamp = buffer[0] + 0b011110000000; // Add 1920micros because that is the measured time for the code between samples on the board
+                                // using a. ADC prescaler of 16, and  a baud rate of 2000000-8N1. These bits are discarded and not sent by the board
+
                                 str.Append(stamp.ToString());
                                 str.Append(",");
 
