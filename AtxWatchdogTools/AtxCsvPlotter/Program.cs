@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics.Eventing.Reader;
 using System.Drawing;
 using System.IO;
 using AtxCsvPlotter.Endpoints;
@@ -16,18 +15,20 @@ namespace AtxCsvPlotter
             { "png", typeof(Endpoints.Png.PngPlotOutput) },
         };
 
-        private static Color PlotBackgroundColor = Color.Transparent;
-        private static int PlotDpi = 150;
+        private static Color? PlotBackgroundColor = Color.Transparent;
+        private static int? PlotDpi = 150;
         private static bool PlotMetadata = true;
-        private static string[] AxisNames = new string[] {"V", "T"};
+        private static string[] AxisNames = null;
         private static bool LoadRunFile = true;
         private static string ModeName = null;
         private static List<string> InputFiles = new List<string>();
         private static List<string> MetadataFiles = new List<string>();
+        private static string GenConfigFilename = null;
+        private static string ConfigFilename = null;
 
         static void Main(string[] args)
         {
-            if (args == null || args.Length < 2)
+            if (args == null || args.Length < 1)
             {
                 Console.WriteLine("Plots CSV files coming from watchdog boards to images or the display");
                 Console.WriteLine("Usage:");
@@ -52,6 +53,13 @@ namespace AtxCsvPlotter
                 Console.WriteLine("   Specifies optional metadata files for each input file. These include additional details about the PSU");
                 Console.WriteLine("   like transition states. Files must be separated by a semicolon. If metadata is not present for every file");
                 Console.WriteLine("   then multiple semicolons can be specified to omit files whose metadata is not present.");
+                Console.WriteLine(" /config=file.xml");
+                Console.WriteLine("   Specifies an XMl file that stores all settings that must be used when generating a plot, like its size, and colors used.");
+                Console.WriteLine("   If this value is not specified, the default settings will be used.");
+                Console.WriteLine(" /genconfig=file.xml");
+                Console.WriteLine("   Using this modifier will force the app to write a new XML configuration file to the specified filename, with the defaults");
+                Console.WriteLine("   values on all its entries. This file can be used as an starting point for custom config files.");
+                Console.WriteLine("   Also note that using this modifier will force the application to quit without reading or plotting any other input file.");
                 Console.WriteLine();
                 Console.WriteLine(" A " + RUN_FILENAME + " file can be created in the working directory, with commands that are automatically processed");
                 Console.WriteLine("  by the tool when executed. These file can include most used settings like /background and /axes.");
@@ -71,6 +79,15 @@ namespace AtxCsvPlotter
             Endpoint modeHandler = null;
 
             ProcessArguments(args);
+
+            if (!string.IsNullOrWhiteSpace(GenConfigFilename))
+            {
+                EndpointConfig config = new EndpointConfig();
+                config.SaveTo(GenConfigFilename);
+                Console.WriteLine("Config file written to " + GenConfigFilename);
+                return;
+            }
+
             if (LoadRunFile)
             {
                 if (File.Exists(RUN_FILENAME))
@@ -128,9 +145,24 @@ namespace AtxCsvPlotter
             }
 
             // Apply settings
-            modeHandler.Config.AxesNames = AxisNames;
-            modeHandler.Config.Background = PlotBackgroundColor;
-            modeHandler.Config.Dpi = PlotDpi;
+            if (!string.IsNullOrWhiteSpace(ConfigFilename))
+            {
+                modeHandler.Config = EndpointConfig.Loadfrom(ConfigFilename);
+
+                if (AxisNames != null) modeHandler.Config.AxesNames = AxisNames;
+                if (PlotBackgroundColor != null) modeHandler.Config.Background = PlotBackgroundColor.Value;
+                if (PlotDpi != null) modeHandler.Config.Dpi = PlotDpi.Value;
+            }
+            else
+            {
+                if (AxisNames == null) AxisNames = new string[] {"V", "T"};
+                if (PlotBackgroundColor == null) PlotBackgroundColor = Color.Transparent;
+                if (PlotDpi == null) PlotDpi = 150;
+
+                modeHandler.Config.AxesNames = AxisNames;
+                modeHandler.Config.Background = PlotBackgroundColor.Value;
+                modeHandler.Config.Dpi = PlotDpi.Value;
+            }
 
             modeHandler.Initialize();
 
@@ -329,6 +361,50 @@ namespace AtxCsvPlotter
                             catch (Exception e)
                             {
                                 Console.WriteLine("Cannot parse metadata file names from string " + parts[1]);
+                                Console.WriteLine(e);
+#if DEBUG
+                                Console.WriteLine();
+                                Console.WriteLine("Press any key to exit");
+                                Console.ReadKey();
+#endif
+                                return;
+                            }
+                        }
+
+                        if (string.Equals(parts[0], "/config", StringComparison.OrdinalIgnoreCase))
+                        {
+                            try
+                            {
+                                if (!File.Exists(parts[1]))
+                                    throw new FileNotFoundException("The specified config file cannot be found.");
+
+                                ConfigFilename = parts[1];
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("Cannot parse config file from string " + parts[1]);
+                                Console.WriteLine(e);
+#if DEBUG
+                                Console.WriteLine();
+                                Console.WriteLine("Press any key to exit");
+                                Console.ReadKey();
+#endif
+                                return;
+                            }
+                        }
+
+                        if (string.Equals(parts[0], "/genconfig", StringComparison.OrdinalIgnoreCase))
+                        {
+                            try
+                            {
+                                if (File.Exists(parts[1]))
+                                    throw new IOException("The specified config file already exist. Please use another filename.");
+
+                                GenConfigFilename = parts[1];
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("Cannot parse argument from string " + parts[1]);
                                 Console.WriteLine(e);
 #if DEBUG
                                 Console.WriteLine();

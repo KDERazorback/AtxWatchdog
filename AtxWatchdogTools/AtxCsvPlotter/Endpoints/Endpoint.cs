@@ -156,18 +156,29 @@ namespace AtxCsvPlotter.Endpoints
                 f.GdiCharSet, f.GdiVerticalFont);
         }
 
-        private int _tmpBitmapIndex = 0;
-
-        protected void __WriteTmpBitmap()
+        /// <summary>
+        /// Converts a pen using Point units into one using Pixel units, based on the specified DPI config
+        /// </summary>
+        /// <param name="p">Pen to be converted</param>
+        /// <returns>A converted pen that uses Pixels as its units</returns>
+        protected Pen RasterPen(Pen p)
         {
-            // DISABLED //
-            /*
-            FileInfo fi = new FileInfo(OutputFilename);
-            string tmpFilename = fi.FullName.Substring(0, fi.FullName.Length - fi.Extension.Length) + "_" +
-                                 _tmpBitmapIndex + DefaultExtension;
-            Canvas.Save(tmpFilename, ImageFormat.Png);
-            _tmpBitmapIndex++;
-            */
+            return new Pen(p.Color, p.Width)
+            {
+                Alignment = p.Alignment,
+                CompoundArray = p.CompoundArray,
+                CustomStartCap = p.CustomStartCap,
+                CustomEndCap = p.CustomEndCap,
+                DashCap = p.DashCap,
+                DashStyle = p.DashStyle,
+                DashOffset = p.DashOffset,
+                DashPattern = p.DashPattern,
+                StartCap = p.StartCap,
+                EndCap = p.EndCap,
+                Transform = p.Transform,
+                LineJoin = p.LineJoin,
+                MiterLimit = p.MiterLimit
+            };
         }
 
         /// <summary>
@@ -317,6 +328,11 @@ namespace AtxCsvPlotter.Endpoints
             return markers.ToArray();
         }
 
+        /// <summary>
+        /// Reads a 32bit long data type in Big Endian encoding from the specified stream
+        /// </summary>
+        /// <param name="stream">Stream where the value will be read</param>
+        /// <returns>A 32bit long value read from the specified stream</returns>
         protected virtual long ReadLongFromStream(Stream stream)
         {
             int valh1 = stream.ReadByte();
