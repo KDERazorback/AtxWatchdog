@@ -178,9 +178,12 @@ namespace AtxCsvAnalyzer
                         CalcSegmentStats(railData, x - 1, x, railStats, MetadataLinesNames);
 
                     // Calc stats from T1 to ON
-                    CalcSegmentStats(railData, 0, 3, railStats, MetadataLinesNames);
+                    RailSegmentStats onstats = CalcSegmentStats(railData, 0, 3, railStats, MetadataLinesNames);
+                    stats.PgOkSignalTimeUs = onstats.DurationUs;
                 }
-             }
+
+                stats.LastStageRecorded = MetadataLinesNames[MetadataMarkers.Length - 1];
+            }
 
             CloseLog();
 

@@ -27,6 +27,8 @@ namespace AtxCsvAnalyzer
         [DataMember] public long[][] SourceMetadata { get; set; }
 
         [DataMember] public AtxDeviceMetadata DeviceInfo { get; set; }
+        [DataMember] public long PgOkSignalTimeUs { get; set; }
+        [DataMember] public string LastStageRecorded { get; set; }
 
         // Serialization methods
         public void SerializeTo(string filename)

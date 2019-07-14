@@ -30,7 +30,7 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine();
                 Console.WriteLine("Analyzes and generates PSU statistics from CSV files coming from watchdog boards");
                 Console.WriteLine("Usage:");
-                Console.WriteLine("       atxcsvanalyze.exe [/m=file1metadata.bin] [/tar|/csv|/full] [/x=file1info.txt|/x=@] <file1.csv> <outfile1.csv> ... [/m=fileNmetadata.bin] [fileN.csv] [outfileN.csv]");
+                Console.WriteLine("       atxcsvanalyze.exe [/m=file1metadata.bin] [/tar|/csv|/full] [/tardir=<path>] [/x=file1info.txt|/x=@] <file1.csv> <outfile1.csv> ... [/m=fileNmetadata.bin] [fileN.csv] [outfileN.csv]");
                 Console.WriteLine();
                 Console.WriteLine("  Analyzes multiple input files and store the results on the specified output file as CSV.");
                 Console.WriteLine("  If the specified output file exists, it will be overwritten.");
@@ -52,6 +52,11 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine("     If this parameter is missing entirely, then no info will be appended to the output stats.");
                 Console.WriteLine("  /tar");
                 Console.WriteLine("     Generates an output compressed tar.gz archive only with stats files.");
+                Console.WriteLine("     This option is per input file.");
+                Console.WriteLine("  /tardir=path");
+                Console.WriteLine("     Specifies an additional directory to include on the output Tar archive.");
+                Console.WriteLine("     This option has effect only with /tar.");
+                Console.WriteLine("     This option can be specified multiple times to include multiple directories.");
                 Console.WriteLine("     This option is per input file.");
                 Console.WriteLine("  /csv");
                 Console.WriteLine("     Generates multiple CSV output stats files.");
@@ -102,6 +107,22 @@ namespace AtxCsvAnalyzer
                     tmpEntry.InfoFilename = fi.FullName;
 
                     Console.WriteLine("Setting info file for next input file: " + file);
+                    continue;
+                }
+
+                if (args[i].StartsWith("/tardir=", StringComparison.OrdinalIgnoreCase))
+                {
+                    string dir = args[i].Substring(8);
+                    DirectoryInfo di = new DirectoryInfo(dir);
+                    if (!di.Exists)
+                    {
+                        Console.WriteLine("Error!: Specified extra directory " + di + " cannot be found.");
+                        return;
+                    }
+
+                    tmpEntry.ExtraDirs.Add(dir, di.FullName);
+
+                    Console.WriteLine("+ Adding extra data directory: " + di);
                     continue;
                 }
 
@@ -213,6 +234,7 @@ namespace AtxCsvAnalyzer
 
                     AtxStatsDumper dumper = new AtxStatsDumper(job.OutputFilename);
                     dumper.ExtraData = analyzer.LogStream;
+                    dumper.ExtraDirectories = job.ExtraDirs.ToArray();
                     dumper.ExtraDataName = "last_log.txt";
                     if (job.GenerateCsv)
                         dumper.DumpCsvs(stats);

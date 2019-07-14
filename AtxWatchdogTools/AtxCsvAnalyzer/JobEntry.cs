@@ -14,5 +14,6 @@ namespace AtxCsvAnalyzer
         public bool GenerateTar { get; set; } = false;
         public bool GenerateCsv { get; set; } = true;
         public string OutputFilename { get; set; }
+        public Dictionary<string, string> ExtraDirs { get; set; } = new Dictionary<string, string>();
     }
 }
