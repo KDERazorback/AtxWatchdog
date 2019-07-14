@@ -290,7 +290,7 @@ namespace AtxCsvAnalyzer
                 "+5V T2 Slope",
                 "+3.3V T2 Slope",
                 "+5VSB Max V",
-                "+512V Max V",
+                "+12V Max V",
                 "+5V Max V",
                 "+3.3V Max V",
                 "PG_GOOD Delay"
@@ -351,7 +351,7 @@ namespace AtxCsvAnalyzer
                 writer.Append(cells[i].Replace("\"", "\"\""));
                 writer.Append('"');
             }
-            writer.AppendLine();
+            //writer.AppendLine();
 
             return writer.ToString();
         }
