@@ -311,22 +311,22 @@ namespace AtxCsvAnalyzer
                 string.IsNullOrWhiteSpace(stats.LastStageRecorded) ? "T0" : stats.LastStageRecorded,
 
                 // ON
-                stats.V5SBStats.OnStageStats.MeanVoltage.ToString("N3"),
-                stats.V5SBStats.OnStageStats.DeviationVoltage.ToString("N3"),
+                stats.V5SBStats.OnStageStats?.MeanVoltage.ToString("N3") ?? "",
+                stats.V5SBStats.OnStageStats?.DeviationVoltage.ToString("N3") ?? "",
 
-                stats.V12Stats.OnStageStats.MeanVoltage.ToString("N3"),
-                stats.V12Stats.OnStageStats.DeviationVoltage.ToString("N3"),
+                stats.V12Stats.OnStageStats?.MeanVoltage.ToString("N3") ?? "",
+                stats.V12Stats.OnStageStats?.DeviationVoltage.ToString("N3") ?? "",
 
-                stats.V5Stats.OnStageStats.MeanVoltage.ToString("N3"),
-                stats.V5Stats.OnStageStats.DeviationVoltage.ToString("N3"),
+                stats.V5Stats.OnStageStats?.MeanVoltage.ToString("N3") ?? "",
+                stats.V5Stats.OnStageStats?.DeviationVoltage.ToString("N3") ?? "",
 
-                stats.V3_3Stats.OnStageStats.MeanVoltage.ToString("N3"),
-                stats.V3_3Stats.OnStageStats.DeviationVoltage.ToString("N3"),
+                stats.V3_3Stats.OnStageStats?.MeanVoltage.ToString("N3") ?? "",
+                stats.V3_3Stats.OnStageStats?.DeviationVoltage.ToString("N3") ?? "",
 
                 // T2
-                stats.V12Stats.T2StageStats.Slope.ToString("N2"),
-                stats.V5Stats.T2StageStats.Slope.ToString("N2"),
-                stats.V3_3Stats.T2StageStats.Slope.ToString("N2"),
+                stats.V12Stats.T2StageStats?.Slope.ToString("N2") ?? "",
+                stats.V5Stats.T2StageStats?.Slope.ToString("N2") ?? "",
+                stats.V3_3Stats.T2StageStats?.Slope.ToString("N2") ?? "",
 
                 // Max voltage per rail
                 stats.V5SBStats.MaxVoltage.ToString("N3"),
