@@ -30,7 +30,11 @@ namespace AtxDataDumper
         static void Main(string[] args)
         {
             Console.Title = "ATX Watchdog data dumper";
+            Console.WriteLine("ATXWatchdog Serial Data Dumper");
+            Console.WriteLine("Copyright (c) Fabian Ramos 2019");
+            Console.WriteLine();
             Console.WriteLine("Press Ctrl+C when done to flush buffers and quit.");
+            Console.WriteLine();
 
             if (args == null || args.Length < 1)
             {

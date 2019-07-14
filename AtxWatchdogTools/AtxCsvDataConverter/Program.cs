@@ -10,6 +10,9 @@ namespace AtxCsvDataConverter
         {
             if (args == null || args.Length < 1)
             {
+                Console.WriteLine("AtxCsvConverter");
+                Console.WriteLine("Copyright (c) Fabian Ramos 2019");
+                Console.WriteLine();
                 Console.WriteLine("Usage:");
                 Console.WriteLine("  atxcsv.exe <binFile1> ... [binFileN]");
                 Console.WriteLine(" This tool will convert all specified files to CSV sheets. Output files will be named according to input files");

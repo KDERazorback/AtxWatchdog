@@ -9,6 +9,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtxCsvDataConverter", "AtxC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtxCsvPlotter", "AtxCsvPlotter\AtxCsvPlotter.csproj", "{405D23B7-9FCD-4C45-8187-2A19E7322BEE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtxCsvAnalyzer", "AtxCsvAnalyzer\AtxCsvAnalyzer.csproj", "{D3065108-739E-41EF-97C3-C834235190BD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtxCsvAnalyzerTests", "AtxCsvAnalyzerTests\AtxCsvAnalyzerTests.csproj", "{DAC21CD8-E6D0-44B3-8BCB-B75C0255336F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{405D23B7-9FCD-4C45-8187-2A19E7322BEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{405D23B7-9FCD-4C45-8187-2A19E7322BEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{405D23B7-9FCD-4C45-8187-2A19E7322BEE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3065108-739E-41EF-97C3-C834235190BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3065108-739E-41EF-97C3-C834235190BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3065108-739E-41EF-97C3-C834235190BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3065108-739E-41EF-97C3-C834235190BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DAC21CD8-E6D0-44B3-8BCB-B75C0255336F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DAC21CD8-E6D0-44B3-8BCB-B75C0255336F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DAC21CD8-E6D0-44B3-8BCB-B75C0255336F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DAC21CD8-E6D0-44B3-8BCB-B75C0255336F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

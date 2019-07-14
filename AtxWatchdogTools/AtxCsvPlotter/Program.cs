@@ -30,6 +30,9 @@ namespace AtxCsvPlotter
         {
             if (args == null || args.Length < 1)
             {
+                Console.WriteLine("AtxCsvPlotter");
+                Console.WriteLine("Copyright (c) Fabian Ramos 2019");
+                Console.WriteLine();
                 Console.WriteLine("Plots CSV files coming from watchdog boards to images or the display");
                 Console.WriteLine("Usage:");
                 Console.WriteLine("       atxcsvplot.exe png <file1.csv> ... [fileN.csv] [/background=#aarrggbb] [/nometadata] [/dpi=xxx]");
