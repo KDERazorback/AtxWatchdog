@@ -30,26 +30,26 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine();
                 Console.WriteLine("Analyzes and generates PSU statistics from CSV files coming from watchdog boards");
                 Console.WriteLine("Usage:");
-                Console.WriteLine("       atxcsvanalyze.exe [/m=file1metadata.bin] [/tar|/csv|/full] [/x=file1info.txt|/x=@] <file1.csv> ... [/m=fileNmetadata.bin] [fileN.csv] <outfile.csv>");
+                Console.WriteLine("       atxcsvanalyze.exe [/m=file1metadata.bin] [/tar|/csv|/full] [/x=file1info.txt|/x=@] <file1.csv> <outfile1.csv> ... [/m=fileNmetadata.bin] [fileN.csv] [outfileN.csv]");
                 Console.WriteLine();
                 Console.WriteLine("  Analyzes multiple input files and store the results on the specified output file as CSV.");
-                Console.WriteLine("  If the specified output file exists, analyzed data will be appended to it.");
+                Console.WriteLine("  If the specified output file exists, it will be overwritten.");
                 Console.WriteLine("  NOTE: The output filename's extension is not guaranteed to be used.");
                 Console.WriteLine("        CSV stat files are written in CSV format regardless of the extension specified.");
                 Console.WriteLine("        DUMP files are written in XML format regardless of the extension specified.");
                 Console.WriteLine("        TAR archives are written with a .tar.gz exension.");
                 Console.WriteLine();
+                Console.WriteLine("     All options below are valid for the next input file only.");
+                Console.WriteLine();
                 Console.WriteLine("  /m=file.bin");
                 Console.WriteLine("     Loads the specified metadata binary file for further data analysis.");
                 Console.WriteLine("     Use /m to set the metadata for the next input file.");
-                Console.WriteLine("     The specified metadata file is valid only for the next input file.");
                 Console.WriteLine("     If no metadata is specified, only partial statistics will be generated.");
                 Console.WriteLine("  /x=infofile.txt|@");
                 Console.WriteLine("     Loads the specified info file (in plain text format) with details about the physica hardware specs.");
                 Console.WriteLine("     for the input datastream. This only serves the purpose of decorating output data.");
                 Console.WriteLine("     If you specifify '@' as the value, this data will be prompted at runtime.");
                 Console.WriteLine("     If this parameter is missing entirely, then no info will be appended to the output stats.");
-                Console.WriteLine("     The specified info file is valid only for the next input file.");
                 Console.WriteLine("  /tar");
                 Console.WriteLine("     Generates an output compressed tar.gz archive only with stats files.");
                 Console.WriteLine("     This option is per input file.");
@@ -68,16 +68,10 @@ namespace AtxCsvAnalyzer
                 return;
             }
 
-            string outputFile = args.Last();
-
-            FileInfo fo = new FileInfo(outputFile);
-            if (!fo.Directory?.Exists?? false)
-                fo.Directory.Create();
-
             Queue<JobEntry> inputFiles = new Queue<JobEntry>();
             JobEntry tmpEntry = new JobEntry();
 
-            for (int i = 0; i < args.Length - 1; i++)
+            for (int i = 0; i < args.Length; i++)
             {
                 if (args[i].StartsWith("/m=", StringComparison.OrdinalIgnoreCase))
                 {
@@ -138,14 +132,24 @@ namespace AtxCsvAnalyzer
                     continue;
                 }
 
-                FileInfo fi2 = new FileInfo(args[i]);
-                if (!fi2.Exists)
+                if (string.IsNullOrWhiteSpace(tmpEntry.InputFilename))
                 {
-                    Console.WriteLine("Error!: The specified input data file doesnt exists. " + args[i]);
-                    return;
+                    FileInfo fi2 = new FileInfo(args[i]);
+                    if (!fi2.Exists)
+                    {
+                        Console.WriteLine("Error!: The specified input data file doesnt exists. " + args[i]);
+                        return;
+                    }
+                    tmpEntry.InputFilename = fi2.FullName;
+                    continue;
                 }
 
-                tmpEntry.InputFilename = args[i];
+                FileInfo fo = new FileInfo(args[i]);
+                if (!fo.Directory?.Exists ?? false)
+                    fo.Directory.Create();
+
+                tmpEntry.OutputFilename = fo.FullName;
+
                 inputFiles.Enqueue(tmpEntry);
                 tmpEntry = new JobEntry();
             }
@@ -207,7 +211,7 @@ namespace AtxCsvAnalyzer
                         stats.DeviceInfo = metadata;
                     }
 
-                    AtxStatsDumper dumper = new AtxStatsDumper(outputFile);
+                    AtxStatsDumper dumper = new AtxStatsDumper(job.OutputFilename);
                     dumper.ExtraData = analyzer.LogStream;
                     dumper.ExtraDataName = "last_log.txt";
                     if (job.GenerateCsv)
