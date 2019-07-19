@@ -33,6 +33,8 @@ namespace AtxDataDumper
             Console.WriteLine("ATXWatchdog Serial Data Dumper");
             Console.WriteLine("Copyright (c) Fabian Ramos 2019");
             Console.WriteLine();
+            Console.WriteLine("Current working path: {0}", Directory.GetCurrentDirectory());
+            Console.WriteLine();
             Console.WriteLine("Press Ctrl+C when done to flush buffers and quit.");
             Console.WriteLine();
 
@@ -54,17 +56,23 @@ namespace AtxDataDumper
 
             Console.CancelKeyPress += ConsoleOnCancelKeyPress;
 
-            string serialAddress = args[0].Trim().ToUpperInvariant();
+            string serialAddress = args[0].Trim();
             bool isUsingSerial = true;
             SerialPort port = null;
             FileStream fs = null;
 
-            if (File.Exists(serialAddress))
+            bool isUnixDevice = Environment.OSVersion.Platform == PlatformID.Unix || Environment.OSVersion.Platform == PlatformID.MacOSX;
+            if (isUnixDevice)
+                isUnixDevice = serialAddress.StartsWith("/dev/", StringComparison.Ordinal);
+
+            if (File.Exists(serialAddress) && !isUnixDevice)
             {
                 try
                 {
                     isUsingSerial = false;
                     Console.WriteLine("Reading from local file stream: " + serialAddress);
+                    fs = new FileStream(serialAddress, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    Console.WriteLine("File opened.");
                 }
                 catch (Exception e)
                 {
@@ -77,11 +85,10 @@ namespace AtxDataDumper
 #endif
                     return;
                 }
-                fs = new FileStream(serialAddress, FileMode.Open, FileAccess.Read, FileShare.Read);
-                Console.WriteLine("File opened.");
             }
             else
             {
+                if (!isUnixDevice) serialAddress = serialAddress.ToUpperInvariant();
                 Console.WriteLine("Reading from Serial port: " + serialAddress.ToUpperInvariant());
                 port = new SerialPort(serialAddress, 2000000, Parity.None, 8, StopBits.One);
                 port.DtrEnable = true;
@@ -278,14 +285,14 @@ namespace AtxDataDumper
 
         private static void OpenStreams(bool openRawStream)
         {
-            dataStream = new FileStream(".\\datastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
-            statusStream = new FileStream(".\\statusstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+            dataStream = new FileStream("." + Path.DirectorySeparatorChar + "datastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+            statusStream = new FileStream("." + Path.DirectorySeparatorChar + "statusstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
 
             if (openRawStream)
-                rawStream = new FileStream(".\\rawstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+                rawStream = new FileStream("." + Path.DirectorySeparatorChar + "rawstream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
 
-            metadataStream = new FileStream(".\\metadatastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
-            textStream = new FileStream(".\\textstream.txt", FileMode.Create, FileAccess.Write, FileShare.None);
+            metadataStream = new FileStream("." + Path.DirectorySeparatorChar + "metadatastream.bin", FileMode.Create, FileAccess.Write, FileShare.None);
+            textStream = new FileStream("." + Path.DirectorySeparatorChar + "textstream.txt", FileMode.Create, FileAccess.Write, FileShare.None);
         }
 
         private static void CloseStreams()

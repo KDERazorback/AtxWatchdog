@@ -237,7 +237,7 @@ namespace AtxCsvPlotter
                             return;
                         }
 
-                        if (string.Equals(parts[0], "/background", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(1), "background", StringComparison.OrdinalIgnoreCase))
                         {
                             if (parts[1].StartsWith("#") && parts[1].Length == 9)
                             {
@@ -283,7 +283,7 @@ namespace AtxCsvPlotter
                             continue;
                         }
 
-                        if (string.Equals(parts[0], "/dpi", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(1), "dpi", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -318,7 +318,7 @@ namespace AtxCsvPlotter
                             continue;
                         }
 
-                        if (string.Equals(parts[0], "/axes", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(1), "axes", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -351,7 +351,7 @@ namespace AtxCsvPlotter
                             continue;
                         }
 
-                        if (string.Equals(parts[0], "/metadata", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(1), "metadata", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -372,7 +372,7 @@ namespace AtxCsvPlotter
                             }
                         }
 
-                        if (string.Equals(parts[0], "/config", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(1), "config", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -394,7 +394,7 @@ namespace AtxCsvPlotter
                             }
                         }
 
-                        if (string.Equals(parts[0], "/genconfig", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(1), "genconfig", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -418,13 +418,13 @@ namespace AtxCsvPlotter
                     }
                     else
                     {
-                        if (string.Equals(p, "/nometadata", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(p.Substring(1), "nometadata", StringComparison.OrdinalIgnoreCase))
                         {
                             PlotMetadata = false;
                             continue;
                         }
 
-                        if (string.Equals(p, "/norun", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(p.Substring(1), "norun", StringComparison.OrdinalIgnoreCase))
                         {
                             LoadRunFile = false;
                             continue;
