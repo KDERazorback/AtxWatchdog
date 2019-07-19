@@ -166,18 +166,18 @@ namespace AtxCsvPlotter.Endpoints
             return new Pen(p.Color, p.Width)
             {
                 Alignment = p.Alignment,
-                CompoundArray = p.CompoundArray,
-                CustomStartCap = p.CustomStartCap,
-                CustomEndCap = p.CustomEndCap,
-                DashCap = p.DashCap,
+                //CompoundArray = p.CompoundArray,
+                //CustomStartCap = p.CustomStartCap,
+                //CustomEndCap = p.CustomEndCap,
+                //DashCap = p.DashCap,
                 DashStyle = p.DashStyle,
                 DashOffset = p.DashOffset,
-                DashPattern = p.DashPattern,
-                StartCap = p.StartCap,
-                EndCap = p.EndCap,
+                //DashPattern = p.DashPattern,
+                //StartCap = p.StartCap,
+                //EndCap = p.EndCap,
                 Transform = p.Transform,
-                LineJoin = p.LineJoin,
-                MiterLimit = p.MiterLimit
+                //LineJoin = p.LineJoin,
+                //MiterLimit = p.MiterLimit
             };
         }
 

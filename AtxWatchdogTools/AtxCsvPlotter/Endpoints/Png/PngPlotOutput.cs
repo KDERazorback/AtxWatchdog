@@ -122,7 +122,7 @@ namespace AtxCsvPlotter.Endpoints.Png
 
                 timeOffset = 0;
                 for (int w = 0; w < (timeStep * i); w++)
-                    timeOffset += (ulong)timeSeries[w];
+                    timeOffset += (ulong)timeSeries[Math.Min(timeSeries.Length- 1, w)];
 
                 string xlabel = (timeOffset / 1000.0f).ToString("N1"); // In ms
                 Device.DrawLine(RasterPen(Config.GridPen),
