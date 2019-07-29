@@ -20,6 +20,7 @@
 #include "PiezoBuzzer.h"
 #include "AtxVoltmeter.h"
 #include "Timer.h"
+#include "AtxWatchdogDFU.h"
 
 // LEFT SIDE
 #define MODE_SEL 4
@@ -76,6 +77,7 @@ Timer updatePkgScheduler(&SendStatusUpdatePkg);
 // Sketch setup code
 void setup() {
   Serial.begin(2000000);
+  Serial.println("ATX_WATCHDOG");
   Serial.println("Booting...");
 
   // Set ADC prescaler to 16
@@ -101,6 +103,11 @@ void setup() {
     Serial.println("PSU ONLY");
   else
     Serial.println("PC BRIDGE");
+
+  bool enterDfu = dfuCheck(1500); // Check the incoming serial stream for 1.5 seconds and enter DFU mode if signaled
+  // In DFU mode the device can be reconfigured, or put on hold for a certain amount of time
+
+  if (enterDfu) dfuMode();
 
   // Set ATX Calibration
   Atx.setV12Coefficients  (0.0000000005904564646f, -0.000001065254196f, 0.0007292712878f   , -0.2083356261f     , 25.39229605f        );
