@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
 using AtxCsvPlotter.Endpoints;
 
 namespace AtxCsvPlotter
@@ -64,7 +65,10 @@ namespace AtxCsvPlotter
                 Console.WriteLine();
                 Console.WriteLine(" A " + RUN_FILENAME + " file can be created in the working directory, with commands that are automatically processed");
                 Console.WriteLine("  by the tool when executed. These file can include most used settings like /background and /axes.");
-                Console.WriteLine(" Arguments on these file must be places one per line, and are appended to the actual command line args.");
+                Console.WriteLine(" Arguments on these file must be placed one per line, and are appended to the actual command line args.");
+                Console.WriteLine(" If a run file is not present on the working directory, it will be search on the directory where this tool is located.");
+                Console.WriteLine();
+                Console.WriteLine(" Arguments can be specified with a double dash -- instead of an slash / for cross-platform compatibility");
                 Console.WriteLine();
                 Console.WriteLine("Available output modes");
                 foreach (string k in availableModes.Keys)
@@ -91,10 +95,22 @@ namespace AtxCsvPlotter
 
             if (LoadRunFile)
             {
-                if (File.Exists(RUN_FILENAME))
+                string fileLocation = RUN_FILENAME;
+                if (!File.Exists(fileLocation))
+                {
+                    Assembly assy = Assembly.GetExecutingAssembly();
+                    if (assy != null)
+                    {
+                        FileInfo fi = new FileInfo(assy.Location);
+                        if (fi.Directory != null && fi.Directory.Exists)
+                            fileLocation = Path.Combine(fi.Directory.FullName, RUN_FILENAME);
+                    }
+                }
+
+                if (File.Exists(fileLocation))
                 {
                     List<string> runargs = new List<string>();
-                    using (FileStream fs = new FileStream(RUN_FILENAME, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (FileStream fs = new FileStream(fileLocation, FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
                         using (TextReader reader = new StreamReader(fs))
                         {
@@ -219,7 +235,22 @@ namespace AtxCsvPlotter
             {
                 string p = s.Trim();
 
-                if (p.StartsWith("/") || p.StartsWith("-"))
+                int argSpecIndex = 0;
+                bool isArg = false;
+
+                if (p.StartsWith("/", StringComparison.Ordinal) && p.Length > 1)
+                {
+                    isArg = true;
+                    argSpecIndex = 1;
+                }
+
+                if (p.StartsWith("--", StringComparison.Ordinal) && p.Length > 2)
+                {
+                    isArg = true;
+                    argSpecIndex = 2;
+                }
+
+                if (isArg)
                 {
                     // Switch or modifier
                     if (p.Contains("="))
@@ -237,9 +268,9 @@ namespace AtxCsvPlotter
                             return;
                         }
 
-                        if (string.Equals(parts[0].Substring(1), "background", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(argSpecIndex), "background", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (parts[1].StartsWith("#") && parts[1].Length == 9)
+                            if (parts[1].StartsWith("#", StringComparison.Ordinal) && parts[1].Length == 9)
                             {
                                 try
                                 {
@@ -283,7 +314,7 @@ namespace AtxCsvPlotter
                             continue;
                         }
 
-                        if (string.Equals(parts[0].Substring(1), "dpi", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(argSpecIndex), "dpi", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -318,7 +349,7 @@ namespace AtxCsvPlotter
                             continue;
                         }
 
-                        if (string.Equals(parts[0].Substring(1), "axes", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(argSpecIndex), "axes", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -351,7 +382,7 @@ namespace AtxCsvPlotter
                             continue;
                         }
 
-                        if (string.Equals(parts[0].Substring(1), "metadata", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(argSpecIndex), "metadata", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -372,7 +403,7 @@ namespace AtxCsvPlotter
                             }
                         }
 
-                        if (string.Equals(parts[0].Substring(1), "config", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(argSpecIndex), "config", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -394,7 +425,7 @@ namespace AtxCsvPlotter
                             }
                         }
 
-                        if (string.Equals(parts[0].Substring(1), "genconfig", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(parts[0].Substring(argSpecIndex), "genconfig", StringComparison.OrdinalIgnoreCase))
                         {
                             try
                             {
@@ -418,13 +449,13 @@ namespace AtxCsvPlotter
                     }
                     else
                     {
-                        if (string.Equals(p.Substring(1), "nometadata", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(p.Substring(argSpecIndex), "nometadata", StringComparison.OrdinalIgnoreCase))
                         {
                             PlotMetadata = false;
                             continue;
                         }
 
-                        if (string.Equals(p.Substring(1), "norun", StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(p.Substring(argSpecIndex), "norun", StringComparison.OrdinalIgnoreCase))
                         {
                             LoadRunFile = false;
                             continue;

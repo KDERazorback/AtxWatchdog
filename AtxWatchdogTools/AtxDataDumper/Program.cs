@@ -13,6 +13,7 @@ namespace AtxDataDumper
         private const byte DATA_PACKET_START = 0x11; // From Arduino code
         private const byte STATUS_PACKET_START = 0x12; // From Arduino code
         private const byte METADATA_PACKET_START = 0x13; // From Arduino code
+        private const int BAUD_RATE = 2000000; // From Arduino code
 
         private static bool abortSignalRequested = false;
 
@@ -65,6 +66,8 @@ namespace AtxDataDumper
             if (isUnixDevice)
                 isUnixDevice = serialAddress.StartsWith("/dev/", StringComparison.Ordinal);
 
+            Console.WriteLine("Current platform is: {0}. {1}", Environment.OSVersion.Platform.ToString(), (isUnixDevice ? "UNIX device support enabled." : ""));
+
             if (File.Exists(serialAddress) && !isUnixDevice)
             {
                 try
@@ -89,8 +92,8 @@ namespace AtxDataDumper
             else
             {
                 if (!isUnixDevice) serialAddress = serialAddress.ToUpperInvariant();
-                Console.WriteLine("Reading from Serial port: " + serialAddress.ToUpperInvariant());
-                port = new SerialPort(serialAddress, 2000000, Parity.None, 8, StopBits.One);
+                Console.WriteLine("Reading from Serial port: {0} at a baud rate of {1}", serialAddress.ToUpperInvariant(), BAUD_RATE.ToString("N0"));
+                port = new SerialPort(serialAddress, BAUD_RATE, Parity.None, 8, StopBits.One);
                 port.DtrEnable = true;
                 port.RtsEnable = false;
 

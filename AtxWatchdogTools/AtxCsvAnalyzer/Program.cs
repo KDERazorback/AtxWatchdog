@@ -30,7 +30,8 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine();
                 Console.WriteLine("Analyzes and generates PSU statistics from CSV files coming from watchdog boards");
                 Console.WriteLine("Usage:");
-                Console.WriteLine("       atxcsvanalyze.exe [/m=file1metadata.bin] [/tar|/csv|/full] [/tardir=<path>] [/x=file1info.txt|/x=@] <file1.csv> <outfile1.csv> ... [/m=fileNmetadata.bin] [fileN.csv] [outfileN.csv]");
+                Console.WriteLine("       atxcsvanalyze.exe [/metadata=file1metadata.bin] [/tar|/csv|/full] [/tardir=<path>] [/info=file1info.txt|/info=@]");
+                Console.WriteLine("                         <file1.csv> <outfile1.csv> ... [/metadata=fileNmetadata.bin] [fileN.csv] [outfileN.csv]");
                 Console.WriteLine();
                 Console.WriteLine("  Analyzes multiple input files and store the results on the specified output file as CSV.");
                 Console.WriteLine("  If the specified output file exists, it will be overwritten.");
@@ -41,11 +42,11 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine();
                 Console.WriteLine("     All options below are valid for the next input file only.");
                 Console.WriteLine();
-                Console.WriteLine("  /m=file.bin");
+                Console.WriteLine("  /metadata=file.bin");
                 Console.WriteLine("     Loads the specified metadata binary file for further data analysis.");
                 Console.WriteLine("     Use /m to set the metadata for the next input file.");
                 Console.WriteLine("     If no metadata is specified, only partial statistics will be generated.");
-                Console.WriteLine("  /x=infofile.txt|@");
+                Console.WriteLine("  /info=infofile.txt|@");
                 Console.WriteLine("     Loads the specified info file (in plain text format) with details about the physica hardware specs.");
                 Console.WriteLine("     for the input datastream. This only serves the purpose of decorating output data.");
                 Console.WriteLine("     If you specifify '@' as the value, this data will be prompted at runtime.");
@@ -64,116 +65,15 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine("  /full");
                 Console.WriteLine("     Generates both multiple CSV and a compressed .tar.gz files.");
                 Console.WriteLine("     This option is per input file.");
-
-#if DEBUG
                 Console.WriteLine();
-                Console.WriteLine("Press any key to exit");
-                Console.ReadKey();
-#endif
+                Console.WriteLine(" Arguments can be specified with a double dash -- instead of an slash / for cross-platform compatibility");
                 return;
             }
 
-            Queue<JobEntry> inputFiles = new Queue<JobEntry>();
-            JobEntry tmpEntry = new JobEntry();
+            Queue<JobEntry> inputFiles = GetJobsFromCommandLine(args);
 
-            for (int i = 0; i < args.Length; i++)
-            {
-                if (args[i].StartsWith("/m=", StringComparison.OrdinalIgnoreCase))
-                {
-                    string file = args[i].Substring(3);
-                    FileInfo fi = new FileInfo(file);
-                    if (!fi.Exists)
-                    {
-                        Console.WriteLine("Error!: Specified metadata file " + file + " cannot be found.");
-                        return;
-                    }
-
-                    tmpEntry.MetadataFilename = fi.FullName;
-
-                    Console.WriteLine("Setting metadata file for next input file: " + file);
-                    continue;
-                }
-
-                if (args[i].StartsWith("/x=", StringComparison.OrdinalIgnoreCase) && !string.Equals(args[i], "/x=@", StringComparison.OrdinalIgnoreCase))
-                {
-                    string file = args[i].Substring(3);
-                    FileInfo fi = new FileInfo(file);
-                    if (!fi.Exists)
-                    {
-                        Console.WriteLine("Error!: Specified info file " + file + " cannot be found.");
-                        return;
-                    }
-
-                    tmpEntry.InfoFilename = fi.FullName;
-
-                    Console.WriteLine("Setting info file for next input file: " + file);
-                    continue;
-                }
-
-                if (args[i].StartsWith("/tardir=", StringComparison.OrdinalIgnoreCase))
-                {
-                    string dir = args[i].Substring(8);
-                    DirectoryInfo di = new DirectoryInfo(dir);
-                    if (!di.Exists)
-                    {
-                        Console.WriteLine("Error!: Specified extra directory " + di + " cannot be found.");
-                        return;
-                    }
-
-                    tmpEntry.ExtraDirs.Add(dir, di.FullName);
-
-                    Console.WriteLine("+ Adding extra data directory: " + di);
-                    continue;
-                }
-
-                if (string.Equals(args[i], "/x=@", StringComparison.OrdinalIgnoreCase))
-                {
-                    tmpEntry.InfoFilename = "@";
-                    continue;
-                }
-
-                if (string.Equals(args[i], "/tar", StringComparison.OrdinalIgnoreCase))
-                {
-                    tmpEntry.GenerateTar = true;
-                    tmpEntry.GenerateCsv = false;
-                    continue;
-                }
-
-                if (string.Equals(args[i], "/csv", StringComparison.OrdinalIgnoreCase))
-                {
-                    tmpEntry.GenerateTar = false;
-                    tmpEntry.GenerateCsv = true;
-                    continue;
-                }
-
-                if (string.Equals(args[i], "/full", StringComparison.OrdinalIgnoreCase))
-                {
-                    tmpEntry.GenerateTar = true;
-                    tmpEntry.GenerateCsv = true;
-                    continue;
-                }
-
-                if (string.IsNullOrWhiteSpace(tmpEntry.InputFilename))
-                {
-                    FileInfo fi2 = new FileInfo(args[i]);
-                    if (!fi2.Exists)
-                    {
-                        Console.WriteLine("Error!: The specified input data file doesnt exists. " + args[i]);
-                        return;
-                    }
-                    tmpEntry.InputFilename = fi2.FullName;
-                    continue;
-                }
-
-                FileInfo fo = new FileInfo(args[i]);
-                if (!fo.Directory?.Exists ?? false)
-                    fo.Directory.Create();
-
-                tmpEntry.OutputFilename = fo.FullName;
-
-                inputFiles.Enqueue(tmpEntry);
-                tmpEntry = new JobEntry();
-            }
+            if (inputFiles == null)
+                return;
 
             if (inputFiles.Count < 1)
             {
@@ -251,6 +151,135 @@ namespace AtxCsvAnalyzer
             }
 
             Console.WriteLine("{0} files processed.", totalFiles.ToString());
+        }
+
+        private static Queue<JobEntry> GetJobsFromCommandLine(string[] args)
+        {
+            Queue<JobEntry> output = new Queue<JobEntry>();
+            JobEntry tmpEntry = new JobEntry();
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                string p = args[i];
+
+                int argSpecIndex = 0;
+                bool isArg = false;
+
+                if (p.StartsWith("/", StringComparison.Ordinal) && p.Length > 1)
+                {
+                    isArg = true;
+                    argSpecIndex = 1;
+                }
+
+                if (p.StartsWith("--", StringComparison.Ordinal) && p.Length > 2)
+                {
+                    isArg = true;
+                    argSpecIndex = 2;
+                }
+
+                if (isArg)
+                {
+                    p = p.Substring(argSpecIndex);
+
+                    if (p.StartsWith("metadata=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string file = p.Substring(9);
+                        FileInfo fi = new FileInfo(file);
+                        if (!fi.Exists)
+                        {
+                            Console.WriteLine("Error!: Specified metadata file " + file + " cannot be found.");
+                            return null;
+                        }
+
+                        tmpEntry.MetadataFilename = fi.FullName;
+
+                        Console.WriteLine("Setting metadata file for next input file: " + file);
+                        continue;
+                    }
+
+                    if (p.StartsWith("info=", StringComparison.OrdinalIgnoreCase) && !string.Equals(p, "info=@", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string file = p.Substring(5);
+                        FileInfo fi = new FileInfo(file);
+                        if (!fi.Exists)
+                        {
+                            Console.WriteLine("Error!: Specified info file " + file + " cannot be found.");
+                            return null;
+                        }
+
+                        tmpEntry.InfoFilename = fi.FullName;
+
+                        Console.WriteLine("Setting info file for next input file: " + file);
+                        continue;
+                    }
+
+                    if (p.StartsWith("tardir=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string dir = p.Substring(8);
+                        DirectoryInfo di = new DirectoryInfo(dir);
+                        if (!di.Exists)
+                        {
+                            Console.WriteLine("Error!: Specified extra directory " + di + " cannot be found.");
+                            return null;
+                        }
+
+                        tmpEntry.ExtraDirs.Add(dir, di.FullName);
+
+                        Console.WriteLine("+ Adding extra data directory: " + di);
+                        continue;
+                    }
+
+                    if (string.Equals(p, "info=@", StringComparison.OrdinalIgnoreCase))
+                    {
+                        tmpEntry.InfoFilename = "@";
+                        continue;
+                    }
+
+                    if (string.Equals(p, "tar", StringComparison.OrdinalIgnoreCase))
+                    {
+                        tmpEntry.GenerateTar = true;
+                        tmpEntry.GenerateCsv = false;
+                        continue;
+                    }
+
+                    if (string.Equals(p, "csv", StringComparison.OrdinalIgnoreCase))
+                    {
+                        tmpEntry.GenerateTar = false;
+                        tmpEntry.GenerateCsv = true;
+                        continue;
+                    }
+
+                    if (string.Equals(p, "full", StringComparison.OrdinalIgnoreCase))
+                    {
+                        tmpEntry.GenerateTar = true;
+                        tmpEntry.GenerateCsv = true;
+                        continue;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(tmpEntry.InputFilename))
+                {
+                    FileInfo fi2 = new FileInfo(p);
+                    if (!fi2.Exists)
+                    {
+                        Console.WriteLine("Error!: The specified input data file doesnt exists. " + p);
+                        return null;
+                    }
+                    tmpEntry.InputFilename = fi2.FullName;
+                    continue;
+                }
+
+                FileInfo fo = new FileInfo(p);
+                if (!fo.Directory?.Exists ?? false)
+                    fo.Directory.Create();
+
+                tmpEntry.OutputFilename = fo.FullName;
+
+                output.Enqueue(tmpEntry);
+                tmpEntry = new JobEntry();
+            }
+
+            return output;
         }
     }
 }
