@@ -50,8 +50,8 @@ fi
 function __print_help() {
     echo
     echo "Usage:"
-    echo "       ${0} <debug|release> <target_os>"
-    echo " Generated native images for Debug or Release assemblies"
+    echo "       ${0} <bin_path> <debug|release> <target_os>"
+    echo " Generated native images from the specified path for Debug or Release assemblies"
     echo " Target OS specifies the target system for the built images."
     echo "   Options can be: osx, debian, ubuntu, raspbian"
 }
@@ -82,8 +82,33 @@ function __trim_str() {
     func_result=$str
 }
 
-build_type=$1
-target_os=$2
+bin_path=$1
+build_type=$2
+target_os=$3
+
+if [ -z $bin_path ]; then
+    echo "Error: Binaries path not specified."
+    __print_help
+    exit 1
+fi
+
+if [ -z $build_type ]; then
+    echo "Error: Build Type not specified."
+    __print_help
+    exit 1
+fi
+
+if [ -z $target_os ]; then
+    echo "Error: Target OS not specified."
+    __print_help
+    exit 1
+fi
+
+if [ $build_type != "debug" ] && [ $build_type != "release" ]; then
+    echo "Error: Invalid build type. Options are 'debug' or 'release'"
+    exit 1
+fi
+
 clr_target=$(${mkbundle} --local-targets | grep "${target_os}" | tail -n1)
 
 if [ ! $? -eq 0 ]; then
@@ -119,43 +144,26 @@ target_path="native_images/${target_os}/${clr_target}/${build_type}"
 
 echo "CLR Target: ${clr_target}"
 
-if [ -z $build_type ]; then
-    echo "Error: Build Type not specified."
-    __print_help
-    exit 1
-fi
-
-if [ -z $target_os ]; then
-    echo "Error: Target OS not specified."
-    __print_help
-    exit 1
-fi
-
-if [ $build_type != "debug" ] && [ $build_type != "release" ]; then
-    echo "Error: Invalid build type. Options are 'debug' or 'release'"
-    exit 1
-fi
-
 mkdir -p $target_path
 
 echo "Generating images..."
 
 echo "atxdump..."
-__gen_image $clr_target "AtxDataDumper/bin/${build_type}" "atxdump.exe" "$target_path/atxdump"
+__gen_image $clr_target "${bin_path}/${build_type}" "atxdump.exe" "$target_path/atxdump"
 if [ ! $? -eq 0 ]; then
     echo "Error: Failed to generate image."
     exit 1
 fi
 
 echo "atxcsv..."
-__gen_image $clr_target "atxcsvdataconverter/bin/${build_type}" "atxcsv.exe" "$target_path/atxcsv"
+__gen_image $clr_target "${bin_path}/${build_type}" "atxcsv.exe" "$target_path/atxcsv"
 if [ ! $? -eq 0 ]; then
     echo "Error: Failed to generate image."
     exit 1
 fi
 
 echo "atxcsvplotter..."
-__gen_image $clr_target "atxcsvplotter/bin/${build_type}" "atxcsvplot.exe" "$target_path/atxcsvplot"
+__gen_image $clr_target "${bin_path}/${build_type}" "atxcsvplot.exe" "$target_path/atxcsvplot"
 if [ ! $? -eq 0 ]; then
     echo "Error: Failed to generate image."
     exit 1
@@ -164,18 +172,18 @@ fi
 echo "atxcsvanalyzer..."
 if [[ $OSTYPE == darwin* ]]; then
     libs="${libc_lib}"
-    __gen_image $clr_target "AtxCsvAnalyzer/bin/${build_type}" "atxcsvanalyze.exe" "$target_path/atxcsvanalyze" libs
+    __gen_image $clr_target "${bin_path}/${build_type}" "atxcsvanalyze.exe" "$target_path/atxcsvanalyze" libs
 else
-    __gen_image $clr_target "AtxCsvAnalyzer/bin/${build_type}" "atxcsvanalyze.exe" "$target_path/atxcsvanalyze"
+    __gen_image $clr_target "${bin_path}/${build_type}" "atxcsvanalyze.exe" "$target_path/atxcsvanalyze"
 fi
 if [ ! $? -eq 0 ]; then
     echo "Error: Failed to generate image."
     exit 1
 fi
 
-
 if [ $libc_lib_local_workaround -eq 1 ]; then
-    $(rm -f libc.dylib libc.so )
+    $(rm -f libc.dylib)
+    $(rm -f libc.so)
 fi
 
 echo "Image generation complete."
