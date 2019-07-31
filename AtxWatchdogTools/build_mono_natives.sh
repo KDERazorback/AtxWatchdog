@@ -163,7 +163,12 @@ if [ ! $? -eq 0 ]; then
 fi
 
 echo "atxcsvplotter..."
-__gen_image $clr_target "${bin_path}/${build_type}" "atxcsvplot.exe" "$target_path/atxcsvplot"
+if [[ $OSTYPE == darwin* ]]; then
+    libs="${libc_lib}"
+    __gen_image $clr_target "${bin_path}/${build_type}" "atxcsvplot.exe" "$target_path/atxcsvplot" libs
+else
+    __gen_image $clr_target "${bin_path}/${build_type}" "atxcsvplot.exe" "$target_path/atxcsvplot"
+fi
 if [ ! $? -eq 0 ]; then
     echo "Error: Failed to generate image."
     exit 1

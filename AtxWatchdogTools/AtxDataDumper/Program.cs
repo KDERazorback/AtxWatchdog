@@ -21,6 +21,10 @@ namespace AtxDataDumper
         private static ulong dataDataLength = 0;
         private static ulong metadataDataLength = 0;
         private static bool isPackedProtocolPresent = false;
+        private static bool waitDeviceWelcome = true; // Indicates that the port should wait for the device to send
+        // an ASCII byte from the Serial line before starting to dump its incoming data on the Data Stream
+        // This is used to avoid false readings while the device is powering on due to the main PIC not being
+        // connected to the RTS line of the USB-UART IC
 
         private static FileStream dataStream;
         private static FileStream statusStream;
@@ -53,6 +57,31 @@ namespace AtxDataDumper
                 Console.ReadKey();
 #endif
                 return;
+            }
+
+            if (args.Length > 1)
+            {
+                for (int i = 1; i < args.Length; i++)
+                {
+                    string parm = args[i].Trim();
+
+                    int parmNameIndex = -1;
+                    if (parm.StartsWith("/", StringComparison.Ordinal) || parm.StartsWith("-", StringComparison.Ordinal))
+                        parmNameIndex = 1;
+                    if (parm.StartsWith("--", StringComparison.Ordinal))
+                        parmNameIndex = 2;
+
+                    if (parmNameIndex > 0 && parmNameIndex < parm.Length)
+                    {
+                        parm = parm.Substring(parmNameIndex);
+
+                        if (string.Equals(parm, "nowelcome", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine(" -- Disabling waiting for welcome byte on the Serial stream --");
+                            waitDeviceWelcome = false;
+                        }
+                    }
+                }
             }
 
             Console.CancelKeyPress += ConsoleOnCancelKeyPress;
@@ -122,10 +151,12 @@ namespace AtxDataDumper
             MemoryStream statusStream = new MemoryStream(buffer.Length);
             MemoryStream metadataStream = new MemoryStream(buffer.Length);
             StringBuilder str = new StringBuilder(buffer.Length);
+            ulong discardedPreWelcomeByteCount = 0;
 
             bool isDataPacket = false;
             bool isStatusPacket = false;
             bool isMetadataPacket = false;
+            bool didDeviceWelcome = !waitDeviceWelcome; // Indicates if the device already sent an ASCII byte <0x7F down the Serial line
             int metadataLength = 0;
 
             while ((!isUsingSerial || port.IsOpen) && !abortSignalRequested)
@@ -146,68 +177,84 @@ namespace AtxDataDumper
 
                         for (int i = 0; i < read; i++)
                         {
-                            if (isDataPacket)
-                                dataStream.WriteByte(buffer[i]);
-                            else if (isStatusPacket)
-                                statusStream.WriteByte(buffer[i]);
-                            else if (isMetadataPacket)
+                            if (didDeviceWelcome)
                             {
-                                if (metadataLength == 0)
-                                    metadataLength = buffer[i];
-                                else
-                                    metadataStream.WriteByte(buffer[i]);
-                            }
-                            else
-                            {
-                                if (buffer[i] == DATA_PACKET_START)
-                                {
-                                    // Begin data packet
-                                    dataStream.Seek(0, SeekOrigin.Begin);
-                                    isDataPacket = true;
-                                    continue;
-                                }
-
-                                if (buffer[i] == STATUS_PACKET_START)
-                                {
-                                    // Begin status packet
-                                    statusStream.Seek(0, SeekOrigin.Begin);
-                                    isStatusPacket = true;
-                                    continue;
-                                }
-
-                                if (buffer[i] == METADATA_PACKET_START)
-                                {
-                                    // Begin metadata packet
-                                    metadataStream.Seek(0, SeekOrigin.Begin);
-                                    metadataLength = 0;
-                                    isMetadataPacket = true;
-                                    continue;
-                                }
-
-                                if (buffer[i] == 0x0D || buffer[i] == 0x0A)
-                                {
-                                    // End of line
-
-                                    if (buffer[i] == 0x0A && str.Length < 1)
-                                        continue;
-
-                                    ProcessOutputLine(str.ToString());
-                                    str.Length = 0;
-                                    continue;
-                                }
-
-                                if (buffer[i] >= 0x80)
-                                {
-                                    // Start of new packed protocol for data packets
-                                    dataStream.Seek(0, SeekOrigin.Begin);
+                                if (isDataPacket)
                                     dataStream.WriteByte(buffer[i]);
-                                    isDataPacket = true;
-                                    isPackedProtocolPresent = true;
-                                    continue;
+                                else if (isStatusPacket)
+                                    statusStream.WriteByte(buffer[i]);
+                                else if (isMetadataPacket)
+                                {
+                                    if (metadataLength == 0)
+                                        metadataLength = buffer[i];
+                                    else
+                                        metadataStream.WriteByte(buffer[i]);
                                 }
+                                else
+                                {
+                                    if (buffer[i] == DATA_PACKET_START)
+                                    {
+                                        // Begin data packet
+                                        dataStream.Seek(0, SeekOrigin.Begin);
+                                        isDataPacket = true;
+                                        continue;
+                                    }
+
+                                    if (buffer[i] == STATUS_PACKET_START)
+                                    {
+                                        // Begin status packet
+                                        statusStream.Seek(0, SeekOrigin.Begin);
+                                        isStatusPacket = true;
+                                        continue;
+                                    }
+
+                                    if (buffer[i] == METADATA_PACKET_START)
+                                    {
+                                        // Begin metadata packet
+                                        metadataStream.Seek(0, SeekOrigin.Begin);
+                                        metadataLength = 0;
+                                        isMetadataPacket = true;
+                                        continue;
+                                    }
+
+                                    if (buffer[i] == 0x0D || buffer[i] == 0x0A)
+                                    {
+                                        // End of line
+
+                                        if (buffer[i] == 0x0A && str.Length < 1)
+                                            continue;
+
+                                        ProcessOutputLine(str.ToString());
+                                        str.Length = 0;
+                                        continue;
+                                    }
+
+                                    if (buffer[i] >= 0x80)
+                                    {
+                                        // Start of new packed protocol for data packets
+                                        dataStream.Seek(0, SeekOrigin.Begin);
+                                        dataStream.WriteByte(buffer[i]);
+                                        isDataPacket = true;
+                                        isPackedProtocolPresent = true;
+                                        continue;
+                                    }
                                 
-                                // Normal log output
-                                str.Append((char)buffer[i]);
+                                    // Normal log output
+                                    str.Append((char)buffer[i]);
+                                }
+                            } else
+                            {
+                                if (buffer[i] < 0x7F)
+                                {
+                                    didDeviceWelcome = true;
+                                    // Normal log output
+                                    str.Append((char)buffer[i]);
+                                }
+                                else
+                                {
+                                    //discard input byte
+                                    discardedPreWelcomeByteCount++;
+                                }
                             }
 
                             if (dataStream.Length >= 8)
@@ -272,6 +319,7 @@ namespace AtxDataDumper
             Console.WriteLine(statusDataLength.ToString("N0") + " status bytes received.");
             Console.WriteLine(dataDataLength.ToString("N0") + " data bytes received.");
             Console.WriteLine(metadataDataLength.ToString("N0") + " metadata bytes received.");
+            Console.WriteLine(discardedPreWelcomeByteCount.ToString("N0") + " discarded bytes prior to device welcome.");
 
 #if DEBUG
             Console.WriteLine();

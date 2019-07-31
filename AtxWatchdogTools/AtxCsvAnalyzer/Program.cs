@@ -215,7 +215,7 @@ namespace AtxCsvAnalyzer
 
                     if (p.StartsWith("tardir=", StringComparison.OrdinalIgnoreCase))
                     {
-                        string dir = p.Substring(8);
+                        string dir = p.Substring(7);
                         DirectoryInfo di = new DirectoryInfo(dir);
                         if (!di.Exists)
                         {
