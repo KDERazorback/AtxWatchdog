@@ -10,6 +10,8 @@ namespace AtxCsvAnalyzer
 {
     class Program
     {
+        private static bool _verboseMode = false;
+
 #if DEBUG
         static void Main(string[] args)
         {
@@ -65,6 +67,8 @@ namespace AtxCsvAnalyzer
                 Console.WriteLine("  /full");
                 Console.WriteLine("     Generates both multiple CSV and a compressed .tar.gz files.");
                 Console.WriteLine("     This option is per input file.");
+                Console.WriteLine("  /verbose");
+                Console.WriteLine("     Prints output from the Analyzer object to the console.");
                 Console.WriteLine();
                 Console.WriteLine(" Arguments can be specified with a double dash -- instead of an slash / for cross-platform compatibility");
                 return;
@@ -106,6 +110,14 @@ namespace AtxCsvAnalyzer
                     }
 
                     AtxStaticAnalyzer analyzer = new AtxStaticAnalyzer();
+                    if (_verboseMode)
+                    {
+                        analyzer.LogEntryWritten += (AtxStaticAnalyzer obj, string str) =>
+                        {
+                            Console.WriteLine("\tv: {0}", str);
+                        };
+                    }
+
                     analyzer.SetRailsFromDictionary(series);
                     analyzer.TimeSerie = timeSeries;
 
@@ -253,6 +265,12 @@ namespace AtxCsvAnalyzer
                     {
                         tmpEntry.GenerateTar = true;
                         tmpEntry.GenerateCsv = true;
+                        continue;
+                    }
+
+                    if (string.Equals(p, "verbose", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _verboseMode = true;
                         continue;
                     }
                 }

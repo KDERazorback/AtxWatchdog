@@ -362,7 +362,7 @@ void writeSessionOOSFlags(byte oosflags, int maxOosRailData[], bool leaveOpen) {
   {
     if (!leaveOpen)
       sessionEnd(true);
-    Serial.print("All rails are stable and within spec. [OOS:0x0]");
+    Serial.println("All rails are stable and within spec. [OOS:0x0]");
   }
   else
   {
@@ -710,6 +710,7 @@ void loop_livemode() {
 
     byte psu_mode = 0;
     bool atx_violations = false;
+    bool session_started = false;
 
     // For state timeout detection
     unsigned long startMillis = 0;
@@ -737,6 +738,7 @@ void loop_livemode() {
             Serial.println("PSU arrived.");
             atx_violations = false;
             sessionStart();
+            session_started = true;
           }
 
           if (Atx.isOn())
@@ -790,7 +792,9 @@ void loop_livemode() {
           if (psu_mode != 7) {
             // Was present before and gone
             Serial.println("PSU disconnected.");
-            sessionEnd(!atx_violations);
+            if (session_started)
+              sessionEnd(!atx_violations);
+            session_started = false;
           }
           psu_mode = 7;
           continue;
@@ -917,6 +921,10 @@ void loop_livemode() {
           if (Atx.V12() + Atx.V5() + Atx.V3_3() < ON_OFF_RAIL_SUM_THRESHOLD) {
             psu_mode = 9;
             sessionRecordMark(SESSION_MARK_POFF); // TPOFF: Mark the point where the PSU reached POFF state
+            // End session
+            writeSessionOOSFlags(oosflags, maxOosRailData, true);
+            sessionEnd(!atx_violations);
+            session_started = false;
           }
           break;
         case 8: // ON
@@ -947,15 +955,29 @@ void loop_livemode() {
             psu_mode = 6; // Enter T6
             sessionRecordMark(SESSION_MARK_T6); // T6: Mark the point where the PSU was turned off
             startMillis = millis();
-            writeSessionOOSFlags(oosflags, maxOosRailData, true);
           }
           break;
         case 9: // OFF
-          if (Atx.isOn()) {
+          if (Atx.isOn() && Atx.V5SB() >= 4.0f) {
+            if (!session_started) {
+              atx_violations = false;
+              sessionStart();
+              session_started = true;
+            }
+
             psu_mode = 1; // Enter T1
             sessionRecordMark(SESSION_MARK_T1);
             startMillis = millis();
+          } else {
+            if (session_started && Atx.V5SB() < 4.0f) {
+              // PSU is drying
+              Serial.println("PSU is drying.");
+              writeSessionOOSFlags(oosflags, maxOosRailData, true);
+              sessionEnd(!atx_violations);
+              session_started = false;
+            }
           }
+
           break;
       }
     }

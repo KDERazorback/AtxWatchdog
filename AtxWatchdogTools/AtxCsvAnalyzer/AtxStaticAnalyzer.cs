@@ -21,6 +21,9 @@ namespace AtxCsvAnalyzer
         protected const int POSITIVE = 1;
         protected const int NEGATIVE = -1;
 
+        public delegate void LogEntryWrittenDelegate(AtxStaticAnalyzer instance, string message);
+        public event LogEntryWrittenDelegate LogEntryWritten;
+
         /// <summary>
         /// Stores names for all ATX PSU stages that may be present in a metadata file
         /// </summary>
@@ -71,12 +74,16 @@ namespace AtxCsvAnalyzer
 
         protected void WriteLog(string log)
         {
+            OnLogEntryWritten(log);
+
             if (LogWriter != null)
                 LogWriter.WriteLine(log);
         }
 
         protected void WriteLog(string format, params string[] args)
         {
+            OnLogEntryWritten(string.Format(format, args));
+
             if (LogWriter != null)
                 LogWriter.WriteLine(format, args);
         }
@@ -198,7 +205,7 @@ namespace AtxCsvAnalyzer
             segment.ToSignal = MetadataLinesNames[end];
             long startFrame = start < MetadataMarkers.Length ? MetadataMarkers[start][0] : 0;
             long endFrame = end < MetadataMarkers.Length ? MetadataMarkers[end][0] : 0;
-            if (startFrame < 1 || endFrame < 1)
+            if (startFrame < 1 || endFrame < 1 || endFrame < startFrame)
             {
                 // Metadata incomplete
                 segment.MetadataIncomplete = true;
@@ -269,9 +276,16 @@ namespace AtxCsvAnalyzer
 
                 t2stats.TimeAxis = time;
 
-                Tuple<double, double> line = Fit.Line(time, value);
-                t2stats.Slope = line.Item2;
-                t2stats.YIntercept = line.Item1;
+                if (value.Length < 2)
+                {
+                    WriteLog(
+                        "WARNING!: Insufficient data to generate a linear regression of the T2 stage. Not enough sampling rate on the board.");
+                } else
+                {
+                    Tuple<double, double> line = Fit.Line(time, value);
+                    t2stats.Slope = line.Item2;
+                    t2stats.YIntercept = line.Item1;
+                }
 
                 railStats.T2StageStats = t2stats;
             }
@@ -454,6 +468,11 @@ namespace AtxCsvAnalyzer
             long end = MetadataMarkers[toMetadata][0];
 
             return ExtractPointSegments(points, start, end);
+        }
+
+        protected virtual void OnLogEntryWritten(string message)
+        {
+            LogEntryWritten?.Invoke(this, message);
         }
     }
 }
