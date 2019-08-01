@@ -18,6 +18,8 @@ namespace AtxCsvAnalyzer
     /// </summary>
     public class AtxStaticAnalyzer
     {
+        protected DateTime LogStartTime;
+
         protected const int POSITIVE = 1;
         protected const int NEGATIVE = -1;
 
@@ -56,16 +58,36 @@ namespace AtxCsvAnalyzer
             LogStream = new MemoryStream();
             LogWriter = new StreamWriter(LogStream, new UTF8Encoding(false), 4 * 1024, true);
 
+            LogStartTime = DateTime.Now;
+
+            StringBuilder str = new StringBuilder();
+
+            str.Append(Environment.MachineName);
+            str.Append(" ");
+            str.Append(Environment.OSVersion.ToString());
+            str.Append(" (");
+            str.Append(Environment.OSVersion.VersionString);
+            str.Append(") ");
+
+            string hostInfo = str.ToString();
+            str.Clear();
+
             LogWriter.WriteLine("LOG FILE OPENED");
             LogWriter.WriteLine("Date: " + DateTime.Now.ToLongDateString());
             LogWriter.WriteLine("PeakDetectionWindowSize: " + (PeakDetectionWindowSizePercent * 100).ToString("N3") + "%");
             LogWriter.WriteLine("EdgeDetectionSensitivity: " + EdgeDetectionSensitivity.ToString("N3") + " units.");
+            LogWriter.WriteLine("Hostinfo: {0}", hostInfo);
         }
 
         protected void CloseLog()
         {
             if (LogWriter == null)
                 return;
+
+            DateTime LogEndTime = DateTime.Now;
+            TimeSpan duration = LogEndTime - LogStartTime;
+
+            LogWriter.WriteLine("Entire process took: {0} days, {1} hours, {2} minutes, {3} seconds, {4} milliseconds.", duration.Days, duration.Hours, duration.Minutes, duration.Seconds, duration.Milliseconds); ;
 
             LogWriter.WriteLine("LOG FILE CLOSED");
             LogWriter.Flush();
@@ -90,7 +112,9 @@ namespace AtxCsvAnalyzer
 
         public void LoadMetadata(string filename)
         {
+            WriteLog("Loading metadata...");
             MetadataMarkers = Matrix.LoadMetadataMarkers(filename);
+            WriteLog("Metadata loaded. Len:{0}", MetadataMarkers.Length.ToString());
         }
         public void SetRailsFromDictionary(Dictionary<Rails, float[]> dict)
         {
@@ -104,58 +128,99 @@ namespace AtxCsvAnalyzer
         {
             OpenLog();
 
-            long[] peaks;
-            long[] edges;
             int startingSign;
             AtxStats stats = new AtxStats();
 
-            // Search peaks and edges
-            WriteLog("Searching peaks+edges on V12...");
-            peaks = SearchPeaksEdges(V12Points, out startingSign, out edges);
+            Parallel.For(0, 4, (i) =>
+            {
+                switch (i)
+                {
+                    case 0:
+                        long[] peaks;
+                        long[] edges;
+                        // Search peaks and edges
+                        WriteLog("Searching peaks+edges on V12...");
+                        peaks = SearchPeaksEdges(V12Points, out startingSign, out edges, "V12");
 
-            stats.V12Stats.Points = V12Points;
-            stats.V12Stats.Peaks = peaks;
-            stats.V12Stats.Edges = edges;
-            stats.V12Stats.PeakStartingSign = startingSign;
+                        stats.V12Stats.Points = V12Points;
+                        stats.V12Stats.Peaks = peaks;
+                        stats.V12Stats.Edges = edges;
+                        stats.V12Stats.PeakStartingSign = startingSign;
 
-            WriteLog("Searching peaks+edges on V5...");
-            peaks = SearchPeaksEdges(V5Points, out startingSign, out edges);
+                        WriteLog("Calculation complete for V12 Rail.");
+                        break;
+                    case 1:
+                        WriteLog("Searching peaks+edges on V5...");
+                        peaks = SearchPeaksEdges(V5Points, out startingSign, out edges, "V5");
 
-            stats.V5Stats.Points = V5Points;
-            stats.V5Stats.Peaks = peaks;
-            stats.V5Stats.Edges = edges;
-            stats.V5Stats.PeakStartingSign = startingSign;
+                        stats.V5Stats.Points = V5Points;
+                        stats.V5Stats.Peaks = peaks;
+                        stats.V5Stats.Edges = edges;
+                        stats.V5Stats.PeakStartingSign = startingSign;
 
-            WriteLog("Searching peaks+edges on V5SB...");
-            peaks = SearchPeaksEdges(V5SBPoints, out startingSign, out edges);
+                        WriteLog("Calculation complete for V5 Rail.");
+                        break;
+                    case 2:
+                        WriteLog("Searching peaks+edges on V5SB...");
+                        peaks = SearchPeaksEdges(V5SBPoints, out startingSign, out edges, "V5SB");
 
-            stats.V5SBStats.Points = V5SBPoints;
-            stats.V5SBStats.Peaks = peaks;
-            stats.V5SBStats.Edges = edges;
-            stats.V5SBStats.PeakStartingSign = startingSign;
+                        stats.V5SBStats.Points = V5SBPoints;
+                        stats.V5SBStats.Peaks = peaks;
+                        stats.V5SBStats.Edges = edges;
+                        stats.V5SBStats.PeakStartingSign = startingSign;
 
-            WriteLog("Searching peaks+edges on V3.3...");
-            peaks = SearchPeaksEdges(V3_3Points, out startingSign, out edges);
+                        WriteLog("Calculation complete for V5SB Rail.");
+                        break;
+                    case 3:
+                        WriteLog("Searching peaks+edges on V3.3...");
+                        peaks = SearchPeaksEdges(V3_3Points, out startingSign, out edges, "V3.3");
 
-            stats.V3_3Stats.Points = V3_3Points;
-            stats.V3_3Stats.Peaks = peaks;
-            stats.V3_3Stats.Edges = edges;
-            stats.V3_3Stats.PeakStartingSign = startingSign;
+                        stats.V3_3Stats.Points = V3_3Points;
+                        stats.V3_3Stats.Peaks = peaks;
+                        stats.V3_3Stats.Edges = edges;
+                        stats.V3_3Stats.PeakStartingSign = startingSign;
+
+                        WriteLog("Calculation complete for V3.3 Rail.");
+                        break;
+                }
+            });
 
             // Calculate full-rail stats
             WriteLog("Calculating full-rail stats...");
-            CalcMeanMinMax(stats.V12Stats);
-            CalcMeanMinMax(stats.V5Stats);
-            CalcMeanMinMax(stats.V5SBStats);
-            CalcMeanMinMax(stats.V3_3Stats);
+            Parallel.For(0, 4, (i) =>
+            {
+                switch (i)
+                {
+                    case 0:
+                        CalcMeanMinMax(stats.V12Stats);
+                        WriteLog("Calculation for rail V12 complete.");
+                        break;
+                    case 1:
+                        CalcMeanMinMax(stats.V5Stats);
+                        WriteLog("Calculation for rail V5 complete.");
+                        break;
+                    case 2:
+                        CalcMeanMinMax(stats.V5SBStats);
+                        WriteLog("Calculation for rail V5SB complete.");
+                        break;
+                    case 3:
+                        CalcMeanMinMax(stats.V3_3Stats);
+                        WriteLog("Calculation for rail V3.3 complete.");
+                        break;
+                }
+            });
+
+            WriteLog("Calculation complete for full-rail stats.");
 
             // Process metadata if available
             if (MetadataMarkers != null && MetadataMarkers.Length > 0)
             {
+                WriteLog("Calculating rail segmented stats from metadata...");
                 stats.SourceMetadata = MetadataMarkers;
 
-                for (int i = 0; i < 4; i++)
+                Parallel.For(0, 4, (i) =>
                 {
+                    WriteLog("Rail {0}/4 Pass 1/3 - full", (i+1).ToString());
                     float[] railData;
                     RailStats railStats;
                     switch (i)
@@ -177,19 +242,30 @@ namespace AtxCsvAnalyzer
                             railData = V3_3Points;
                             break;
                         default:
-                            throw new InvalidOperationException("Unexpected internal error. Rail data index invalid.");
+                            throw new InvalidOperationException(string.Format("[Rail {0} Pass --] Unexpected internal error. Rail data index invalid.", (i+1)));
                     }
+
+                    WriteLog("Rail {0}/4 Pass 2/3 - inter", (i + 1).ToString());
 
                     // Calc inter-stage stats
                     for (int x = 1; x < MetadataLinesNames.Length; x++)
-                        CalcSegmentStats(railData, x - 1, x, railStats, MetadataLinesNames);
+                    {
+                        RailSegmentStats output = CalcSegmentStats(railData, x - 1, x, railStats, MetadataLinesNames);
+                        if (output.MetadataIncomplete) WriteLog(string.Format("[Rail {0} Pass 2] Cannot perform analysis pass index={1}. Not enough metadata.", (i+1), x.ToString()));
+                    }
+
+                    WriteLog("Rail {0}/4 Pass 3/3 - activation", (i + 1).ToString());
 
                     // Calc stats from T1 to ON
                     RailSegmentStats onstats = CalcSegmentStats(railData, 0, 3, railStats, MetadataLinesNames);
+                    if (onstats.MetadataIncomplete) WriteLog(string.Format("[Rail {0} Pass 3] Cannot perform analysis pass. Not enough metadata.", (i+1)));
                     stats.PgOkSignalTimeUs = onstats.DurationUs;
-                }
+                });
 
                 stats.LastStageRecorded = MetadataLinesNames[MetadataMarkers.Length - 1];
+            } else
+            {
+                WriteLog("Warning: No metadata was loaded. Skipping rail segmented analysis");
             }
 
             CloseLog();
@@ -205,7 +281,7 @@ namespace AtxCsvAnalyzer
             segment.ToSignal = MetadataLinesNames[end];
             long startFrame = start < MetadataMarkers.Length ? MetadataMarkers[start][0] : 0;
             long endFrame = end < MetadataMarkers.Length ? MetadataMarkers[end][0] : 0;
-            if (startFrame < 1 || endFrame < 1 || endFrame < startFrame)
+            if (startFrame < 0 || endFrame < 1 || endFrame < startFrame)
             {
                 // Metadata incomplete
                 segment.MetadataIncomplete = true;
@@ -295,24 +371,34 @@ namespace AtxCsvAnalyzer
             return segment;
         }
 
-        public long[] SearchPeaksEdges(float[] points, out int startingSign, out long[] edges)
+        public long[] SearchPeaksEdges(float[] points, out int startingSign, out long[] edges, string railName)
         {
             List<long> peaks = new List<long>();
             List<long> lstEdges = new List<long>();
             startingSign = POSITIVE;
             float windowSize = PeakDetectionWindowSizePercent * points.Length;
 
+            // Inner loop vars
+            float right;
+            float left;
+            float val;
+
+            bool peak;
+            bool valley;
+            bool edgeLeft;
+            bool edgeRight;
+            bool different;
             for (int i = 1; i < points.Length - 1; i++)
             {
-                float right = Math.Min(i, windowSize);
-                float left = Math.Min(points.Length - i - 1, windowSize);
-                float val = points[i];
+                right = Math.Min(i, windowSize);
+                left = Math.Min(points.Length - i - 1, windowSize);
+                val = points[i];
 
-                bool peak = true;
-                bool valley = true;
-                bool edgeLeft = false;
-                bool edgeRight = false;
-                bool different = false;
+                peak = true;
+                valley = true;
+                edgeLeft = false;
+                edgeRight = false;
+                different = false;
 
                 if (i > 0 && Math.Abs(points[i - 1] - val) > EdgeDetectionSensitivity)
                     edgeLeft = true;
@@ -384,10 +470,10 @@ namespace AtxCsvAnalyzer
 
             edges = lstEdges.ToArray();
 
-            WriteLog("Found {0} peaks/valleys.", peaks.Count.ToString());
-            WriteLog("First peak is: " + (startingSign == POSITIVE ? "POSITIVE" : "NEGATIVE"));
+            WriteLog("[{0}] Found {1} peaks/valleys.", railName, peaks.Count.ToString());
+            WriteLog("[{0}] First peak is: " + (startingSign == POSITIVE ? "POSITIVE" : "NEGATIVE"), railName);
 
-            StringBuilder str = new StringBuilder("Peaks&Valleys: ");
+            StringBuilder str = new StringBuilder(string.Format("[{0}] Peaks&Valleys: ", railName));
             for (int i = 0; i < peaks.Count; i++)
             {
                 str.Append(peaks[i]);
@@ -396,9 +482,9 @@ namespace AtxCsvAnalyzer
             }
             WriteLog(str.ToString());
 
-            WriteLog("Found {0} edges.", lstEdges.Count.ToString());
+            WriteLog("[{0}] Found {1} edges.", railName, lstEdges.Count.ToString());
 
-            str = new StringBuilder("Edges: ");
+            str = new StringBuilder(string.Format("[{0}] Edges: ", railName));
             for (int i = 0; i < lstEdges.Count; i++)
             {
                 str.Append(lstEdges[i]);

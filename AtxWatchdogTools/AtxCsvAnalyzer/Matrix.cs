@@ -144,9 +144,6 @@ namespace AtxCsvAnalyzer
                 {
                     long value = ReadLongFromStream(fs);
 
-                    if (value < 1)
-                        break;
-
                     long time = ReadLongFromStream(fs);
 
                     markers.Add(new long[] { value, time });

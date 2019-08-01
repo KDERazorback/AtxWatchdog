@@ -726,7 +726,11 @@ void loop_livemode() {
 
     while (true) {
       buzzer.update();
-      Atx.update();
+
+      if (session_started)
+        updateStatus(); // Send info over Serial
+      else
+        Atx.update();
 
       // Detect current mode
       if (psu_mode == 0 || psu_mode == 7)
@@ -801,7 +805,7 @@ void loop_livemode() {
         }
       }
 
-      updateStatus(); // Send info over Serial
+      
 
       // Detect if the PSU has been disconnected
       if (!Atx.isPsuPresent()) {
@@ -928,6 +932,11 @@ void loop_livemode() {
           }
           break;
         case 8: // ON
+          if (!session_started) {
+              atx_violations = false;
+              sessionStart();
+              session_started = true;
+          }
           if (IsOutOfSpec(Atx.V12(), 12.0f))
           {
               if (abs(maxOosRailData[0] - 12.0f) < abs(Atx.V12() - 12.0f)) maxOosRailData[0] = Atx.V12();

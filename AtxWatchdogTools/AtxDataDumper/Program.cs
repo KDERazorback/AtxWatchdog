@@ -32,28 +32,33 @@ namespace AtxDataDumper
         private static FileStream metadataStream;
         private static FileStream textStream;
 
+        private static DateTime lastStatUpdate = DateTime.Now;
+        private static ConsoleOverlay statsOverlay = new ConsoleOverlay();
+        private static ulong byteCounter = 0;
+
         static void Main(string[] args)
         {
             Console.Title = "ATX Watchdog data dumper";
-            Console.WriteLine("ATXWatchdog Serial Data Dumper");
-            Console.WriteLine("Copyright (c) Fabian Ramos 2019");
-            Console.WriteLine();
-            Console.WriteLine("Current working path: {0}", Directory.GetCurrentDirectory());
-            Console.WriteLine();
-            Console.WriteLine("Press Ctrl+C when done to flush buffers and quit.");
-            Console.WriteLine();
+            SafeWriteLine("ATXWatchdog Serial Data Dumper");
+            SafeWriteLine("Copyright (c) Fabian Ramos 2019");
+            SafeWriteLine();
+            SafeWriteLine("Current working path: {0}", Directory.GetCurrentDirectory());
+            SafeWriteLine();
+            SafeWriteLine("Press Ctrl+C when done to flush buffers and quit.");
+            SafeWriteLine();
 
             if (args == null || args.Length < 1)
             {
-                Console.WriteLine("No serial port specified.");
-                Console.WriteLine("Available ports.");
+                SafeWriteLine("No serial port specified.");
+                SafeWriteLine("Available ports.");
                 foreach (string name in SerialPort.GetPortNames())
-                    Console.WriteLine("\t" + name);
-                Console.WriteLine();
-                Console.WriteLine("An input file can be specified instead of a Serial port address, in order to read from it.");
+                    SafeWriteLine("\t" + name);
+                SafeWriteLine();
+                SafeWriteLine("An input file can be specified instead of a Serial port address, in order to read from it.");
 #if DEBUG
-                Console.WriteLine();
-                Console.WriteLine("Press any key to exit");
+                SafeWriteLine();
+                SafeWriteLine("Press any key to exit");
+                statsOverlay.ClearOverlay();
                 Console.ReadKey();
 #endif
                 return;
@@ -77,7 +82,7 @@ namespace AtxDataDumper
 
                         if (string.Equals(parm, "nowelcome", StringComparison.OrdinalIgnoreCase))
                         {
-                            Console.WriteLine(" -- Disabling waiting for welcome byte on the Serial stream --");
+                            SafeWriteLine(" -- Disabling waiting for welcome byte on the Serial stream --");
                             waitDeviceWelcome = false;
                         }
                     }
@@ -95,24 +100,25 @@ namespace AtxDataDumper
             if (isUnixDevice)
                 isUnixDevice = serialAddress.StartsWith("/dev/", StringComparison.Ordinal);
 
-            Console.WriteLine("Current platform is: {0}. {1}", Environment.OSVersion.Platform.ToString(), (isUnixDevice ? "UNIX device support enabled." : ""));
+            SafeWriteLine("Current platform is: {0}. {1}", Environment.OSVersion.Platform.ToString(), (isUnixDevice ? "UNIX device support enabled." : ""));
 
             if (File.Exists(serialAddress) && !isUnixDevice)
             {
                 try
                 {
                     isUsingSerial = false;
-                    Console.WriteLine("Reading from local file stream: " + serialAddress);
+                    SafeWriteLine("Reading from local file stream: " + serialAddress);
                     fs = new FileStream(serialAddress, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    Console.WriteLine("File opened.");
+                    SafeWriteLine("File opened.");
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("Cannot open file. Press any key to exit");
-                    Console.WriteLine(e);
+                    SafeWriteLine("Cannot open file. Press any key to exit");
+                    SafeWriteLine(e);
 #if DEBUG
-                    Console.WriteLine();
-                    Console.WriteLine("Press any key to exit");
+                    SafeWriteLine();
+                    SafeWriteLine("Press any key to exit");
+                    statsOverlay.ClearOverlay();
                     Console.ReadKey();
 #endif
                     return;
@@ -121,7 +127,7 @@ namespace AtxDataDumper
             else
             {
                 if (!isUnixDevice) serialAddress = serialAddress.ToUpperInvariant();
-                Console.WriteLine("Reading from Serial port: {0} at a baud rate of {1}", serialAddress.ToUpperInvariant(), BAUD_RATE.ToString("N0"));
+                SafeWriteLine("Reading from Serial port: {0} at a baud rate of {1}", serialAddress.ToUpperInvariant(), BAUD_RATE.ToString("N0"));
                 port = new SerialPort(serialAddress, BAUD_RATE, Parity.None, 8, StopBits.One);
                 port.DtrEnable = true;
                 port.RtsEnable = false;
@@ -129,15 +135,16 @@ namespace AtxDataDumper
                 try
                 {
                     port.Open();
-                    Console.WriteLine("Port opened.");
+                    SafeWriteLine("Port opened.");
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("Cannot open serial port. Press any key to exit");
-                    Console.WriteLine(e);
+                    SafeWriteLine("Cannot open serial port. Press any key to exit");
+                    SafeWriteLine(e);
 #if DEBUG
-                    Console.WriteLine();
-                    Console.WriteLine("Press any key to exit");
+                    SafeWriteLine();
+                    SafeWriteLine("Press any key to exit");
+                    statsOverlay.ClearOverlay();
                     Console.ReadKey();
 #endif
                     return;
@@ -161,10 +168,14 @@ namespace AtxDataDumper
 
             while ((!isUsingSerial || port.IsOpen) && !abortSignalRequested)
             {
+                UpdateStats();
+
                 try
                 {
                     while ((!isUsingSerial || port.BytesToRead > 0) && !abortSignalRequested)
                     {
+                        UpdateStats();
+
                         int read;
                         if (isUsingSerial)
                         {
@@ -174,6 +185,7 @@ namespace AtxDataDumper
                         else
                             read = fs.Read(buffer, 0, buffer.Length);
 
+                        byteCounter += (ulong)read;
 
                         for (int i = 0; i < read; i++)
                         {
@@ -282,8 +294,9 @@ namespace AtxDataDumper
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("An exception occurred on the main loop.");
-                    Console.WriteLine(e);
+                    SafeWriteLine("An exception occurred on the main loop.");
+                    SafeWriteLine(e);
+                    statsOverlay.ClearOverlay();
                     break;
                 }
             }
@@ -308,7 +321,9 @@ namespace AtxDataDumper
                 fs.Close();
                 fs.Dispose();
             }
-            
+
+            if (metadataStream.Position > 0 && metadataStream.Length > 0)
+                metadataStream.SetLength(metadataStream.Position);
 
             dataStream.Dispose();
             statusStream.Dispose();
@@ -316,14 +331,15 @@ namespace AtxDataDumper
 
             CloseStreams();
 
-            Console.WriteLine(statusDataLength.ToString("N0") + " status bytes received.");
-            Console.WriteLine(dataDataLength.ToString("N0") + " data bytes received.");
-            Console.WriteLine(metadataDataLength.ToString("N0") + " metadata bytes received.");
-            Console.WriteLine(discardedPreWelcomeByteCount.ToString("N0") + " discarded bytes prior to device welcome.");
+            SafeWriteLine(statusDataLength.ToString("N0") + " status bytes received.");
+            SafeWriteLine(dataDataLength.ToString("N0") + " data bytes received.");
+            SafeWriteLine(metadataDataLength.ToString("N0") + " metadata bytes received.");
+            SafeWriteLine(discardedPreWelcomeByteCount.ToString("N0") + " discarded bytes prior to device welcome.");
 
 #if DEBUG
-            Console.WriteLine();
-            Console.WriteLine("Press any key to exit");
+            SafeWriteLine();
+            SafeWriteLine("Press any key to exit");
+            statsOverlay.ClearOverlay();
             Console.ReadKey();
 #endif
         }
@@ -481,7 +497,71 @@ namespace AtxDataDumper
                 byte[] buffer = Encoding.ASCII.GetBytes(line + "\n");
                 textStream.Write(buffer, 0, buffer.Length);
             }
-            Console.WriteLine(line);
+            SafeWriteLine(line);
+        }
+
+        private static void SafeWriteLine()
+        {
+            statsOverlay.ClearOverlay();
+            Console.WriteLine();
+            statsOverlay.ShowOverlay();
+        }
+
+        private static void SafeWriteLine(string message)
+        {
+            statsOverlay.ClearOverlay();
+            Console.WriteLine(message);
+            statsOverlay.ShowOverlay();
+        }
+
+        private static void SafeWriteLine(string message, params string[] args)
+        {
+            statsOverlay.ClearOverlay();
+            Console.WriteLine(message, args);
+            statsOverlay.ShowOverlay();
+        }
+
+        private static void SafeWriteLine(Exception e)
+        {
+            statsOverlay.ClearOverlay();
+            Console.WriteLine(e);
+            statsOverlay.ShowOverlay();
+        }
+
+        private static string SizeToHumanReadable(double size)
+        {
+            string[] powers = { "b", "kib", "mib", "gib", "tib" };
+            int index = 0;
+
+            while (size > 1024.0f)
+            {
+                size /= 1024.0f;
+                index++;
+
+                if (index == powers.Length - 1) break;
+            }
+
+            return size.ToString("N1") + powers[index];
+        }
+
+        private static string SizeToHumanReadable(long size)
+        {
+            return SizeToHumanReadable((double)size);
+        }
+
+        private static void UpdateStats()
+        {
+            TimeSpan delta = DateTime.Now - lastStatUpdate;
+            if (delta.TotalMilliseconds > 1000)
+            {
+                string message = string.Format("Rx: {0} | Now: {1}/s  ",
+                    SizeToHumanReadable(dataDataLength),
+                    SizeToHumanReadable((byteCounter * 1000) / delta.TotalMilliseconds));
+
+                statsOverlay.ShowOverlay(message);
+                lastStatUpdate = DateTime.Now;
+                byteCounter = 0;
+            }
         }
     }
 }
