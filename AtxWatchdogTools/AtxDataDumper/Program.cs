@@ -22,9 +22,12 @@ namespace AtxDataDumper
         private static ulong metadataDataLength = 0;
         private static bool isPackedProtocolPresent = false;
         private static bool waitDeviceWelcome = true; // Indicates that the port should wait for the device to send
-        // an ASCII byte from the Serial line before starting to dump its incoming data on the Data Stream
-        // This is used to avoid false readings while the device is powering on due to the main PIC not being
-        // connected to the RTS line of the USB-UART IC
+                                                      // an ASCII byte from the Serial line before starting to dump its incoming data on the Data Stream
+                                                      // This is used to avoid false readings while the device is powering on due to the main PIC not being
+                                                      // connected to the RTS line of the USB-UART IC
+
+        private static string[] BytePowers = { "b", "kib", "mib", "gib", "tib" };
+        private static string[] HertzPowers = { "hz", "khz", "mhz", "ghz", "thz" };
 
         private static FileStream dataStream;
         private static FileStream statusStream;
@@ -33,8 +36,14 @@ namespace AtxDataDumper
         private static FileStream textStream;
 
         private static DateTime lastStatUpdate = DateTime.Now;
+
         private static ConsoleOverlay statsOverlay = new ConsoleOverlay();
         private static ulong byteCounter = 0;
+        private static ulong dataPacketCounter = 0;
+        private static bool showStatsOverlay = true;
+        private static bool showOverlaySamplingRate = false;
+        private static RunningAvg speedAvg = new RunningAvg();
+        private static RunningAvg rateAvg = new RunningAvg();
 
         static void Main(string[] args)
         {
@@ -84,6 +93,18 @@ namespace AtxDataDumper
                         {
                             SafeWriteLine(" -- Disabling waiting for welcome byte on the Serial stream --");
                             waitDeviceWelcome = false;
+                        }
+
+                        if (string.Equals(parm, "nostats", StringComparison.OrdinalIgnoreCase))
+                        {
+                            SafeWriteLine(" -- Disabling displaying Stream stats --");
+                            showStatsOverlay = false;
+                        }
+
+                        if (string.Equals(parm, "rate", StringComparison.OrdinalIgnoreCase))
+                        {
+                            SafeWriteLine(" -- Enabling sampling rate calculation --");
+                            showOverlaySamplingRate = true;
                         }
                     }
                 }
@@ -274,6 +295,7 @@ namespace AtxDataDumper
                                 // End data packet
                                 isDataPacket = false;
                                 ProcessDataPacket(ref dataStream, isPackedProtocolPresent);
+                                dataPacketCounter++;
                             }
 
                             if (statusStream.Length >= 2)
@@ -335,6 +357,9 @@ namespace AtxDataDumper
             SafeWriteLine(dataDataLength.ToString("N0") + " data bytes received.");
             SafeWriteLine(metadataDataLength.ToString("N0") + " metadata bytes received.");
             SafeWriteLine(discardedPreWelcomeByteCount.ToString("N0") + " discarded bytes prior to device welcome.");
+
+            if (showStatsOverlay) SafeWriteLine(SizeToHumanReadable(speedAvg.Mean) + " mean transfer speed.");
+            if (showOverlaySamplingRate) SafeWriteLine(SizeToHumanReadable(rateAvg.Mean, HertzPowers, 1000.0f) + " mean sampling rate.");
 
 #if DEBUG
             SafeWriteLine();
@@ -528,14 +553,14 @@ namespace AtxDataDumper
             statsOverlay.ShowOverlay();
         }
 
-        private static string SizeToHumanReadable(double size)
+        private static string SizeToHumanReadable(double size, string[] powers = null, float divisor = 1024.0f)
         {
-            string[] powers = { "b", "kib", "mib", "gib", "tib" };
+            if (powers == null) powers = BytePowers;
             int index = 0;
 
-            while (size > 1024.0f)
+            while (size > divisor)
             {
-                size /= 1024.0f;
+                size /= divisor;
                 index++;
 
                 if (index == powers.Length - 1) break;
@@ -551,16 +576,33 @@ namespace AtxDataDumper
 
         private static void UpdateStats()
         {
+            if (!showStatsOverlay)
+            {
+                byteCounter = 0;
+                dataPacketCounter = 0;
+                return;
+            }
+
             TimeSpan delta = DateTime.Now - lastStatUpdate;
             if (delta.TotalMilliseconds > 1000)
             {
+                float speed = (float)((byteCounter * 1000) / delta.TotalMilliseconds);
+                float rate = (float)((dataPacketCounter * 1000) / delta.TotalMilliseconds);
+
+                speedAvg.Add(speed);
+                rateAvg.Add(rate);
+
                 string message = string.Format("Rx: {0} | Now: {1}/s  ",
                     SizeToHumanReadable(dataDataLength),
-                    SizeToHumanReadable((byteCounter * 1000) / delta.TotalMilliseconds));
+                    SizeToHumanReadable(speed));
+
+                if (showOverlaySamplingRate)
+                    message += string.Format("@ {0} ", SizeToHumanReadable(rate, HertzPowers, 1000.0f));
 
                 statsOverlay.ShowOverlay(message);
                 lastStatUpdate = DateTime.Now;
                 byteCounter = 0;
+                dataPacketCounter = 0;
             }
         }
     }
