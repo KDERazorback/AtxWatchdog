@@ -186,6 +186,18 @@ if [ ! $? -eq 0 ]; then
     exit 1
 fi
 
+echo "atxdfu..."
+if [[ $OSTYPE == darwin* ]]; then
+    libs="${libc_lib}"
+    __gen_image $clr_target "${bin_path}/${build_type}" "atxdfu.exe" "$target_path/atxdfu" libs
+else
+    __gen_image $clr_target "${bin_path}/${build_type}" "atxdfu.exe" "$target_path/atxdfu"
+fi
+if [ ! $? -eq 0 ]; then
+    echo "Error: Failed to generate image."
+    exit 1
+fi
+
 if [ $libc_lib_local_workaround -eq 1 ]; then
     $(rm -f libc.dylib)
     $(rm -f libc.so)

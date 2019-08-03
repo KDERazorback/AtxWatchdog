@@ -6,17 +6,6 @@
  * @version 1.0
  */
 
-/*
- * Calibration curves: Syntax: <calCurve2/calCurve3/calCurve4>  x^4 x^3 x^2 x^1 o
- *  V12: calCurve4 0.0000000005904564646f, -0.000001065254196f, 0.0007292712878f, -0.2083356261f, 25.39229605f
- *  V5: calCurve3 0.00000003093601f, -0.000050162482454f, 0.033847756713564f, -4.93920991120435f
- *  V5SB: calCurve3 0.000000144284615f, -0.000188086682585f, 0.089558333834226f, -12.314665470356156f
- *  V3.3: calCurve4 0.000000000158821f, -0.000000279452017f, 0.000186315759286f, -0.050800891265817f, 6.1451224275267f
- *  
- *  New calibration curves:
- *  V5: calCurve2 0.3068071f, 0.1962099f, 1.100424f
- */
-
 #include "PiezoBuzzer.h"
 #include "AtxVoltmeter.h"
 #include "AtxWatchdogDFU.h"
@@ -78,6 +67,12 @@ AtxVoltmeter Atx(V12_SENSE, V5_SENSE, V5SB_SENSE, V3_3_SENSE, PS_ON_SENSE, PS_ON
 // Sketch setup code
 void setup() {
   Serial.begin(2000000);
+
+  bool enterDfu = dfuCheck(1500); // Check the incoming serial stream for 1.5 seconds and enter DFU mode if signaled
+  // In DFU mode the device can be reconfigured
+
+  if (enterDfu) dfuMode();
+  
   Serial.println("ATX_WATCHDOG");
   Serial.println("Booting...");
 
@@ -105,18 +100,7 @@ void setup() {
   else
     Serial.println("PC BRIDGE");
 
-  bool enterDfu = dfuCheck(1500); // Check the incoming serial stream for 1.5 seconds and enter DFU mode if signaled
-  // In DFU mode the device can be reconfigured, or put on hold for a certain amount of time
-
-  if (enterDfu) dfuMode();
-
-  // Set ATX Calibration
-  Atx.setV12Coefficients  (0.0000000005904564646f, -0.000001065254196f, 0.0007292712878f   , -0.2083356261f     , 25.39229605f        );
-  Atx.setV5Coefficients   (0                     , 0                  , 0.3315f            , 0.0330f            , 1.3702f             );
-  Atx.setV5sbCoefficients (0                     , 0.000000144284615f , -0.000188086682585f, 0.089558333834226f , -12.314665470356156f);
-  Atx.setV3_3Coefficients (0.000000000158821f    , -0.000000279452017f, 0.000186315759286f , -0.050800891265817f, 6.1451224275267f    );
-
-  Atx.setSamplingAvgCount(2);
+  Atx.setSamplingAvgCount(3);
 
   // Signal BOOT complete
   Serial.println("Boot OK");
@@ -354,6 +338,8 @@ void SetPsuOk(bool value)
 
 bool IsOutOfSpec(float val, float expected)
 {
+  float ratio = 0.05f;
+  if (Atx.hiNoiseMode()) ratio = 0.075f;
   return (abs(val - expected) > (expected * 0.05f));
 }
 
@@ -456,6 +442,7 @@ void loop_psumode() {
       updateStatus(); // Record a little before turning the PSU on    
 
     bool v5sbOos = false; // Indicates if V5SB falled below spec during this step
+    Atx.setHiNoiseMode(true);
     Atx.turnOn();
     sessionRecordMark(SESSION_MARK_T1); // T1: Mark the point where the PSU was turned ON
     startMillis = millis();
@@ -624,6 +611,7 @@ void loop_psumode() {
     maxOosRailData[1] = 5.0f;
     maxOosRailData[2] = 5.0f;
     maxOosRailData[3] = 3.3f;
+    Atx.setHiNoiseMode(false);
     startMillis = millis();
     while ((millis() - startMillis) < 20000) // Record PSU activity for 20 seconds.
     // Setting the above timeout value must be done while taking in consideration that if the psu has devices attached to it
@@ -752,9 +740,11 @@ void loop_livemode() {
               // PSU is in ON state
               Serial.println("PSU is in ON state");
               psu_mode = 8; // Enter ON state
+              Atx.setHiNoiseMode(false);
               sessionRecordMark(SESSION_MARK_ON); // ON: Mark the point where the PSU entered PON
             } else if (Atx.V12() + Atx.V5() + Atx.V3_3() > ON_OFF_RAIL_SUM_THRESHOLD) {
               // PSU is in T2 or T3
+              Atx.setHiNoiseMode(true);
               oos = false;
               oos |= IsOutOfSpec(Atx.V5SB(), 5.0f);
               oos |= IsOutOfSpec(Atx.V5(), 5.0f);
@@ -774,12 +764,14 @@ void loop_livemode() {
               }
             } else {
               // PSU is in T1 state
+              Atx.setHiNoiseMode(true);
               psu_mode = 1;
               startMillis = millis(); // Record time as if the PSU was turned on just now
               sessionRecordMark(SESSION_MARK_T1);
             }
           } else {
             // PSU could be in  T6, OFF
+            Atx.setHiNoiseMode(false);
             if (Atx.V12() + Atx.V5() + Atx.V3_3() > ON_OFF_RAIL_SUM_THRESHOLD) {
               // PSU is in T6 - ramping down
               psu_mode = 6;
@@ -817,6 +809,7 @@ void loop_livemode() {
       switch (psu_mode)
       {
         case 1: // T1
+          Atx.setHiNoiseMode(true);
           if ((millis() - startMillis) > T1_MAX_TIMEFRAME) {
             if (!atx_violations) {
               Serial.println("(!) T1 timeout.");
@@ -842,6 +835,7 @@ void loop_livemode() {
           }
           break;
         case 2: // T2
+          Atx.setHiNoiseMode(true);
           if ((millis() - startMillis) > T2_MAX_TIMEFRAME) {
             if (!atx_violations) {
               Serial.println("(!) T2 timeout.");
@@ -878,11 +872,12 @@ void loop_livemode() {
             sessionRecordMark(SESSION_MARK_T3); // T3: Mark the point where the PSU entered T3
             sessionRecordMark(SESSION_MARK_ON); // ON: Mark the point where the PSU entered ON
             startMillis = millis();
-            Serial.println("(!) SEVERE ATX VIOLATION: PSU SKIPPED T4 ! ! !");
+            Serial.println("(!) SEVERE ATX VIOLATION: PSU SKIPPED T3 ! ! !");
             atx_violations = true;
           }
           break;
         case 3: // T3
+          Atx.setHiNoiseMode(true);
           if ((millis() - startMillis) > T3_MAX_TIMEFRAME) {
             if (!atx_violations) {
               Serial.println("(!) T3 timeout.");
@@ -900,7 +895,14 @@ void loop_livemode() {
 
           if (oos) {
             if (!atx_violations) {
-              Serial.println("(!) RAILS OOS on T3");
+              Serial.print("(!) RAILS OOS on T3 (");
+              Serial.print(Atx.V12(), 3);
+              Serial.print(", ");
+              Serial.print(Atx.V5(), 3);
+              Serial.print(", ");
+              Serial.print(Atx.V5SB(), 3);
+              Serial.print(", ");
+              Serial.println(Atx.V3_3(), 3);
               buzzer.beep(1200); // 1.2s beep
               SetPsuOk(false);
             }
@@ -913,6 +915,7 @@ void loop_livemode() {
           }
           break;
         case 6: // T6
+          Atx.setHiNoiseMode(false);
           if ((millis() - startMillis) > T6_MAX_TIMEFRAME) {
             if (!atx_violations) {
               Serial.println("(!) T6 timeout.");
@@ -932,6 +935,7 @@ void loop_livemode() {
           }
           break;
         case 8: // ON
+          Atx.setHiNoiseMode(false);
           if (!session_started) {
               atx_violations = false;
               sessionStart();
@@ -967,6 +971,7 @@ void loop_livemode() {
           }
           break;
         case 9: // OFF
+          Atx.setHiNoiseMode(false);
           if (Atx.isOn() && Atx.V5SB() >= 4.0f) {
             if (!session_started) {
               atx_violations = false;

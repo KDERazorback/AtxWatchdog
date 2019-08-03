@@ -293,21 +293,45 @@ namespace AtxCsvPlotter
                             }
                             else
                             {
-                                try
+                                if (parts[1].StartsWith("#", StringComparison.Ordinal) && parts[1].Length == 7)
                                 {
-                                    Color c = Color.FromName(parts[1]);
-                                    PlotBackgroundColor = c;
-                                }
-                                catch (Exception e)
-                                {
-                                    Console.WriteLine("Cannot parse color from name " + parts[1]);
-                                    Console.WriteLine(e);
+                                    try
+                                    {
+                                        Color c = Color.FromArgb(255, int.Parse(parts[1].Substring(1, 2)),
+                                            int.Parse(parts[1].Substring(3, 2)),
+                                            int.Parse(parts[1].Substring(5, 2))));
+                                        PlotBackgroundColor = c;
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Console.WriteLine("Cannot parse color from code " + parts[1]);
+                                        Console.WriteLine(e);
 #if DEBUG
-                                    Console.WriteLine();
-                                    Console.WriteLine("Press any key to exit");
-                                    Console.ReadKey();
+                                        Console.WriteLine();
+                                        Console.WriteLine("Press any key to exit");
+                                        Console.ReadKey();
 #endif
-                                    return;
+                                        return;
+                                    }
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        Color c = Color.FromName(parts[1]);
+                                        PlotBackgroundColor = c;
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Console.WriteLine("Cannot parse color from name " + parts[1]);
+                                        Console.WriteLine(e);
+    #if DEBUG
+                                        Console.WriteLine();
+                                        Console.WriteLine("Press any key to exit");
+                                        Console.ReadKey();
+    #endif
+                                        return;
+                                    }
                                 }
                             }
 

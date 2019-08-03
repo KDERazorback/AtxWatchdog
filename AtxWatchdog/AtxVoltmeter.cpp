@@ -3,11 +3,13 @@
  * Allows manipulation and signal analysis of ATX compatible PC PowerSupplies
  * 
  * @author Fabian Ramos R
- * @version 1.0
+ * @version 1.1
  */
 
 #include "AtxVoltmeter.h"
-#include "CalibrationCurves.c"
+
+#define AREF_MEASURE_LIFETIME 300 // Specifies the amount of time that an AREF value is considered valid for ADC conversions (in ms)
+#define ADC_BANDGAP 1.0745f // Actual bandgap: 1.0745mV
 
 AtxVoltmeter::AtxVoltmeter(int p_v12_pin, int p_v5_pin, int p_v5sb_pin, int p_v3_3_pin, int p_ps_on_pin, int p_ps_on_trigger_pin, int p_pg_good_pin)
 {
@@ -21,21 +23,25 @@ AtxVoltmeter::AtxVoltmeter(int p_v12_pin, int p_v5_pin, int p_v5sb_pin, int p_v3
   ps_on_trigger_pin = p_ps_on_trigger_pin;
 
   sensing_sample_avg_count = 3;
-  sensing_sample_trimming = true;
 }
 
 int AtxVoltmeter::avgAnalogRead(int pin)
 {
   long val = 0;
 
+  analogRead(pin);
+  delayMicroseconds(50);
+
+  if (_hiNoiseMode) {
+    analogRead(pin);
+    delayMicroseconds(50);
+  }
+  
   for (int i = 0; i < sensing_sample_avg_count; i++)
     val += analogRead(pin);
 
   if (sensing_sample_avg_count > 1)
     val /= sensing_sample_avg_count;
-
-  if (val <= 341) // CURVE Trimming of values lower than 341
-    return 0;
 
   return val;
 }
@@ -43,27 +49,13 @@ int AtxVoltmeter::avgAnalogRead(int pin)
 float AtxVoltmeter::senseV12()
 {
   int ival = avgAnalogRead(v12_pin);
-  /*Serial.print("\tv12.ival: ");
-  Serial.println(ival, DEC);*/
+
+  float fval = ((float)ival * vcc) / 1023.0f;
   
-  float fval = calCurve4(v12x4, v12x3, v12x2, v12x1, v12sigma, ival);
+  float r1 = 9945;
+  float r2 = 4640;
 
-  /*Serial.print("\tv12.fval: ");
-  Serial.println(fval, DEC);
-
-  Serial.print("\tCoeff^4: ");
-  Serial.print(v12x4, DEC);
-  Serial.print("\tCoeff^3: ");
-  Serial.print(v12x3, DEC);
-  Serial.print("\tCoeff^2: ");
-  Serial.print(v12x2, DEC);
-  Serial.print("\tCoeff^1: ");
-  Serial.print(v12x1, DEC);
-  Serial.print("\tsigma: ");
-  Serial.println(v12sigma, DEC);*/
-
-  if (fval < 0)
-    return 0;
+  fval = (fval * (r1+r2)) / r2;
 
   return fval;
 }
@@ -73,10 +65,11 @@ float AtxVoltmeter::senseV5()
   int ival = avgAnalogRead(v5_pin);
 
   float fval = ((float)ival * vcc) / 1023.0f;
-  fval = calCurve4(v5x4, v5x3, v5x2, v5x1, v5sigma, fval);
+  
+  float r1 = 9915;
+  float r2 = 21500;
 
-  if (fval < 0)
-    return 0;
+  fval = (fval * (r1+r2)) / r2;
 
   return fval;
 }
@@ -85,10 +78,12 @@ float AtxVoltmeter::senseV5sb()
 {
   int ival = avgAnalogRead(v5sb_pin);
 
-  float fval = calCurve4(v5sbx4, v5sbx3, v5sbx2, v5sbx1, v5sbsigma, ival);
+  float fval = ((float)ival * vcc) / 1023.0f;
 
-  if (fval < 0)
-    return 0;
+  float r1 = 9910;
+  float r2 = 21600;
+
+  fval = (fval * (r1+r2)) / r2;
 
   return fval;
 }
@@ -97,11 +92,7 @@ float AtxVoltmeter::senseV3_3()
 {
   int ival = avgAnalogRead(v3_3_pin);
   
-  float fval = calCurve4(v3_3x4, v3_3x3, v3_3x2, v3_3x1, v3_3sigma, ival); // (?) No curve since its directly connected to the Microcontroller
-  //float fval = ((float)ival * vcc) / 1023.0f;
-
-  if (fval < 0)
-    return 0;
+  float fval = ((float)ival * vcc) / 1023.0f;
 
   return fval;
 }
@@ -129,11 +120,11 @@ float AtxVoltmeter::V3_3()
 void AtxVoltmeter::update()
 {
    vcc = readVcc() / 1000.0f;
-   
-   v12 = senseV12();   
-   v5 = senseV5();   
-   v5sb = senseV5sb();   
+
    v3_3 = senseV3_3();
+   v5sb = senseV5sb();  
+   v5 = senseV5(); 
+   v12 = senseV12();   
    
    ps_on = digitalRead(ps_on_pin);
    pg_good = digitalRead(pg_good_pin);
@@ -179,53 +170,11 @@ void AtxVoltmeter::setSamplingAvgCount(int value)
   sensing_sample_avg_count = value;
 }
 
-bool AtxVoltmeter::getSamplingCurveTrimming()
-{
-  return sensing_sample_trimming;
-}
-
-void AtxVoltmeter::setSamplingCurveTrimming(bool value)
-{
-  sensing_sample_trimming = value;
-}
-
-void AtxVoltmeter::setV12Coefficients(float x4, float x3, float x2, float x1, float sigma)
-{
-  v12x4 = x4;
-  v12x3 = x3;
-  v12x2 = x2;
-  v12x1 = x1;
-  v12sigma = sigma;
-}
-
-void AtxVoltmeter::setV5Coefficients(float x4, float x3, float x2, float x1, float sigma)
-{
-  v5x4 = x4;
-  v5x3 = x3;
-  v5x2 = x2;
-  v5x1 = x1;
-  v5sigma = sigma;
-}
-
-void AtxVoltmeter::setV5sbCoefficients(float x4, float x3, float x2, float x1, float sigma)
-{
-  v5sbx4 = x4;
-  v5sbx3 = x3;
-  v5sbx2 = x2;
-  v5sbx1 = x1;
-  v5sbsigma = sigma;
-}
-
-void AtxVoltmeter::setV3_3Coefficients(float x4, float x3, float x2, float x1, float sigma)
-{
-  v3_3x4 = x4;
-  v3_3x3 = x3;
-  v3_3x2 = x2;
-  v3_3x1 = x1;
-  v3_3sigma = sigma;
-}
-
 long AtxVoltmeter::readVcc() {
+  if (millis() - last_avccref_update > AREF_MEASURE_LIFETIME) avccref = 0;
+  
+  if (avccref > 0) return avccref;
+  
   // Read 1.1V reference against AVcc
   // set the reference to Vcc and the measurement to the internal 1.1V reference
   #if defined(__AVR_ATmega32U4__) || defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
@@ -238,7 +187,7 @@ long AtxVoltmeter::readVcc() {
     ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
   #endif 
 
-  delayMicroseconds(500); // Wait for Vref to settle -- Was 2ms @ KDERazorback
+  delayMicroseconds(750); // Wait for Vref to settle -- Was 2ms @ KDERazorback
   ADCSRA |= _BV(ADSC); // Start conversion
   while (bit_is_set(ADCSRA,ADSC)); // measuring
 
@@ -247,9 +196,10 @@ long AtxVoltmeter::readVcc() {
 
   long result = (high<<8) | low;
 
-  // Calculate Vcc (in mV); 1125300 = 1.1*1023*1000
-  // Actual bandgap: 1100748 = 1.076V*1023*1000
-  result = 1100748L / result; 
+  // Calculate Vcc (in mV); 1100288 = 1.0745*1024*1000
+  result = (ADC_BANDGAP * 1024L * 1000) / result; 
+  avccref = result;
+  last_avccref_update = millis();
   return result; // Vcc in millivolts
 }
 
@@ -259,4 +209,12 @@ void AtxVoltmeter::turnOn() {
 
 void AtxVoltmeter::turnOff() {
   digitalWrite(ps_on_trigger_pin, LOW);
+}
+
+void AtxVoltmeter::setHiNoiseMode(bool value) {
+  _hiNoiseMode = value;
+}
+
+bool AtxVoltmeter::hiNoiseMode() {
+  return _hiNoiseMode;
 }

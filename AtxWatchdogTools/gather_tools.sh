@@ -47,6 +47,8 @@ echo "atxcsvplotter..."
 cp -fr atxcsvplotter/bin/${build_type}/* "${output_path}/${build_type}/"
 echo "atxcsvanalyzer..."
 cp -fr AtxCsvAnalyzer/bin/${build_type}/* "${output_path}/${build_type}/"
+echo "atxdfu..."
+cp -fr AtxDfuTool/bin/${build_type}/* "${output_path}/${build_type}/"
 
 echo "Complete."
 exit 0
