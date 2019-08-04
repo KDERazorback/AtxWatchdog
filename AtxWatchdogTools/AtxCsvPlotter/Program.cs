@@ -274,9 +274,9 @@ namespace AtxCsvPlotter
                             {
                                 try
                                 {
-                                    Color c = Color.FromArgb(int.Parse(parts[1].Substring(1, 2)),
-                                        int.Parse(parts[1].Substring(3, 2)),
-                                        int.Parse(parts[1].Substring(5, 2)), int.Parse(parts[1].Substring(7, 2)));
+                                    Color c = Color.FromArgb(int.Parse(parts[1].Substring(1, 2), System.Globalization.NumberStyles.HexNumber),
+                                        int.Parse(parts[1].Substring(3, 2), System.Globalization.NumberStyles.HexNumber),
+                                        int.Parse(parts[1].Substring(5, 2)), int.Parse(parts[1].Substring(7, 2), System.Globalization.NumberStyles.HexNumber));
                                     PlotBackgroundColor = c;
                                 }
                                 catch (Exception e)
@@ -297,9 +297,9 @@ namespace AtxCsvPlotter
                                 {
                                     try
                                     {
-                                        Color c = Color.FromArgb(255, int.Parse(parts[1].Substring(1, 2)),
-                                            int.Parse(parts[1].Substring(3, 2)),
-                                            int.Parse(parts[1].Substring(5, 2))));
+                                        Color c = Color.FromArgb(255, int.Parse(parts[1].Substring(1, 2), System.Globalization.NumberStyles.HexNumber),
+                                            int.Parse(parts[1].Substring(3, 2), System.Globalization.NumberStyles.HexNumber),
+                                            int.Parse(parts[1].Substring(5, 2), System.Globalization.NumberStyles.HexNumber));
                                         PlotBackgroundColor = c;
                                     }
                                     catch (Exception e)
