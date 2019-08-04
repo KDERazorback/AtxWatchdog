@@ -149,9 +149,15 @@ namespace AtxCsvAnalyzer
                     dumper.ExtraDirectories = job.ExtraDirs.ToArray();
                     dumper.ExtraDataName = "last_log.txt";
                     if (job.GenerateCsv)
+                    {
+                        Console.WriteLine("Dumping CSV stats...");   
                         dumper.DumpCsvs(stats);
+                    }
                     if (job.GenerateTar)
+                    {
+                        Console.WriteLine("Dumping TAR.GZ package...");
                         dumper.DumpGzipped(stats);
+                    }
                 }
                 catch (Exception e)
                 {

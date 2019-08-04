@@ -100,7 +100,7 @@ void setup() {
   else
     Serial.println("PC BRIDGE");
 
-  Atx.setSamplingAvgCount(3);
+  Atx.setSamplingAvgCount(2);
 
   // Signal BOOT complete
   Serial.println("Boot OK");
@@ -319,6 +319,8 @@ void updateStatus()
    sendSerialInt(v5);
    sendSerialInt(v5sb);
    sendSerialInt(v3_3);
+
+   Serial.flush();
 
    serialDataPacketsSent++;
 }

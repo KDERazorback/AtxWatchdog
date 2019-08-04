@@ -30,7 +30,6 @@ int AtxVoltmeter::avgAnalogRead(int pin)
   long val = 0;
 
   analogRead(pin);
-  delayMicroseconds(50);
 
   if (_hiNoiseMode) {
     analogRead(pin);

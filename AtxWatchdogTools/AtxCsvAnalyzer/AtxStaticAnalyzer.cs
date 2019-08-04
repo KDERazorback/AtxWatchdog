@@ -1,6 +1,7 @@
 ﻿using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -388,8 +389,16 @@ namespace AtxCsvAnalyzer
             bool edgeLeft;
             bool edgeRight;
             bool different;
+
+            int progress = 0;
             for (int i = 1; i < points.Length - 1; i++)
             {
+                if (i - progress >= points.Length / 4)
+                {
+                    progress += points.Length / 4;
+                    WriteLog("Progress for rail {0} is now {1}%...", railName, ((progress / (float)points.Length) * 100).ToString("N2"));
+                }
+
                 right = Math.Min(i, windowSize);
                 left = Math.Min(points.Length - i - 1, windowSize);
                 val = points[i];
@@ -405,6 +414,8 @@ namespace AtxCsvAnalyzer
 
                 if (i < points.Length - 1 && Math.Abs(points[i + 1] - val) > EdgeDetectionSensitivity)
                     edgeRight = true;
+
+
 
                 // Search to the right
                 int sign = 0;
@@ -426,6 +437,8 @@ namespace AtxCsvAnalyzer
                         peak = false;
                     if (points[i - r - 1] <= val)
                         valley = false;
+
+                    if (!peak && !valley && !different) break;
                 }
 
                 // Search to the left
@@ -448,6 +461,8 @@ namespace AtxCsvAnalyzer
                         peak = false;
                     if (points[i + l + 1] <= val)
                         valley = false;
+
+                    if (!peak && !valley && !different) break;
                 }
 
                 if (peak || valley)
@@ -552,6 +567,13 @@ namespace AtxCsvAnalyzer
         {
             long start = MetadataMarkers[fromMetadata][0];
             long end = MetadataMarkers[toMetadata][0];
+
+            if (end > points.Length)
+            {
+                WriteLog("Error!: Metadata is not aligned with the data stream. Forcing it...");
+                end = points.Length;
+                if (start >= end) start = end - 1;
+            }
 
             return ExtractPointSegments(points, start, end);
         }
